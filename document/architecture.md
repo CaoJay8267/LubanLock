@@ -366,13 +366,14 @@ skills: [citation-format]
 - DSH/OpenAI：投影结构、Python 脚手架语法、DSH preset 导入通过；
 - 缓存：touch 不变内容仍可复用，内容变化触发重建。
 
-## 7. v0.3 下一步
+## 7. v0.3 之后的候选（非阻断）
 
-1. 实体复用扩展到跨 Agent 共享库（带显式 `uses` 导入与版本约束）。
-2. MCP 增量发现、缓存与 `http` SSE 完整支持。
-3. 证书链吊销/OCSP 与签名时间戳。
-4. 更多投影/导入（OpenAI 反向导入、其他 harness），先核对格式。
-5. 审计规则按类别分组与自定义规则插件。
+1. 跨 Agent 共享库与版本约束（当前 `extends`/`uses` 只在单 Agent 内）。
+2. MCP 的 HTTP/SSE 完整支持、增量发现与连接缓存（当前 stdio 已测，HTTP 基础实现未覆盖测试）。
+3. 证书吊销（CRL/OCSP）与签名时间戳。
+4. DSH/OpenAI 的更深映射（工具、技能、子 Agent；当前 DSH 只映射 persona，OpenAI 只生成脚手架）。
+5. 审计规则插件化与按类别分组。
+6. CI 矩阵、覆盖率、类型检查与发布流水线。
 
 ## 8. v0.2 基线记录
 
@@ -388,13 +389,18 @@ skills: [citation-format]
 | ADR-4 | 自研 JSON Schema 子集 | 零第三方依赖、精确 Pointer、显式拒绝 | 需持续补关键字 |
 | ADR-5 | IR 集合按名称键控 | 引用/校验/checks 路径简单 | 不保留数组顺序 |
 | ADR-6 | 子 Agent 单文件 | 与 Claude 心智一致，避免递归作用域 | 无独立知识/技能目录 |
-| ADR-7 | 无继承/作用域链 | 解析可预测 | 共享需重复声明 |
+| ADR-7 | 同层继承，无跨 Agent 作用域链 | 解析可预测 | 共享需重复声明或显式排序 |
 | ADR-8 | 工作流 DAG、无表达式 | 校验可判定 | 条件/映射由宿主实现 |
 | ADR-9 | 确定性产物 | 可复现、可 diff、可校验 | 不含构建时间 |
-| ADR-10 | 锁文件 + stat 快路径 | 大型知识库避免全量重编译 | mtime 变化会触发重建 |
+| ADR-10 | 锁文件 + 内容哈希缓存 | 大型知识库避免全量重编译 | 仍需维护缓存文件 |
 | ADR-11 | Ed25519 可选签名 | 非对称、可离线验签、默认可复现 | 需要可选依赖 |
 | ADR-12 | 审计为启发式 | 不联网、不执行工具 | 不能替代专业 secret 扫描 |
 | ADR-13 | 投影/适配器 entry point | 核心零厂商依赖 | 插件质量由生态负责 |
+| ADR-14 | 嵌套子 Agent 用静态 `agents`/`uses` | 可判定、可校验 | 深度上限 8 |
+| ADR-15 | `extends` 在 schema 前展开 | IR 无隐式继承 | 继承链上限 16 |
+| ADR-16 | MCP 发现只导入 schema | 不执行工具、不联网推理 | HTTP/SSE 覆盖有限 |
+| ADR-17 | 证书链信任锚由验证方提供 | 支持轮换、默认无签名 | 无吊销/时间戳 |
+| ADR-18 | 审计规则数据化 | 可配置、无需插件即可调 | 规则能力受内置实现限制 |
 
 ## 10. 非目标落实
 
@@ -430,16 +436,19 @@ my-host = "my_package:MyHostAdapter"
 
 ## 12. 已知限制 / TODO
 
-- 子 Agent 仅单文件；无嵌套 `.agents`、独立知识/技能。
-- 无继承/覆盖；共享实体需同层重复。
-- 工作流无条件边/映射/重试/循环。
+- 子 Agent 仅单文件；不能有独立 `.agents/agents/<name>/` 目录、独立知识/技能。
+- `extends`/`uses` 只在当前 Agent 内；无跨 Agent 共享库，无版本约束。
+- 工作流无条件边/数据映射/重试/循环；这些属于宿主执行语义。
 - 知识按原样注入，无检索/分块/token 精确计数。
 - 投影不清理旧文件；重复投影建议空目录。
-- 包无证书链/时间戳；签名是内容完整性，不含身份信任。
+- 证书链支持签名与轮换，但没有吊销、OCSP、时间戳；仅 Ed25519。
 - JSON Schema 子集不含 `unevaluatedProperties`、`$dynamicRef`、`contentEncoding` 等。
-- 审计启发式可能误报/漏报。
-- 暂无 DSH/OpenAI 投影；建议先核对官方格式再以插件实现。
-- `--incremental` 基于 mtime/size，极端情况下需 `--check` 或全量编译兜底。
+- 审计是启发式，规则可配置但没有自定义规则插件。
+- DSH 投影只映射 persona；OpenAI 投影只生成 Agent 脚手架，不生成 handler。
+- `openai` 导入只处理字面量 `Agent(...)` 与 `openai-chat.json`，不执行/不推导任意 Python。
+- MCP 支持 stdio 与基础 HTTP JSON-RPC；SSE/WS 明确不支持，HTTP 路径缺少集成测试。
+- 无 CI、覆盖率门禁、类型检查与正式发布流程；当前验证依赖本地测试。
+- 旧布局 `.agent/` 与 `subagents/` 仍可读，但仅作为兼容路径。
 
 ## 13. 旧版验证记录（v0.2）
 
