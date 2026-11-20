@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """DotAgent 用户入口脚本。
 
 用法：
