@@ -194,17 +194,25 @@ def verify_package(
         anchors: tuple[str | Path, ...] = ()
         if ca_cert is not None:
             anchors = ca_cert if isinstance(ca_cert, tuple) else (ca_cert,)
-        if signature.get("certificate") and not anchors:
-            errors.append("certificate signature requires --ca-cert")
-        elif not signature.get("certificate") and anchors and public_key is None:
+        if not signature.get("certificate") and anchors and public_key is None:
             errors.append("raw signature requires --public-key (not --ca-cert)")
-        elif signature.get("certificate") or public_key is not None:
+        elif signature.get("certificate"):
+            if anchors:
+                try:
+                    verify_manifest(
+                        files["manifest.json"],
+                        signature,
+                        public_key_path=public_key,
+                        ca_cert_paths=anchors,
+                    )
+                except (PackageError, KeyError) as exc:
+                    errors.append(str(exc))
+        elif public_key is not None:
             try:
                 verify_manifest(
                     files["manifest.json"],
                     signature,
                     public_key_path=public_key,
-                    ca_cert_paths=anchors,
                 )
             except (PackageError, KeyError) as exc:
                 errors.append(str(exc))
