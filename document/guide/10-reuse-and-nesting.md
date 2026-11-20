@@ -70,9 +70,27 @@ runtime = dotagent.AgentRuntime.from_path("resource/agent/demo")
 print(runtime.subagent_tree("reviewer"))
 ```
 
+## 跨 Agent 共享库
+
+`spec.uses` 显式导入另一个 DotAgent 工程的工具与模型：
+
+```yaml
+spec:
+  uses:
+    - path: ../shared-tools
+      version: ">=0.2.0,<0.3.0"
+```
+
+- 路径相对当前工程；
+- 被引用工程的 `metadata.version` 必须满足约束；
+- 支持 `>= <= > < == != ~= ^`，逗号组合；
+- 只导入 `tools` 与 `models`；技能/知识不跨工程复制；
+- 重名报 `DTA333`，不静默覆盖；
+- 含共享库的工程不做增量快速路径，`--locked` 仍可检测变化。
+
 ## 边界
 
-- 只在当前 Agent 内复用，不跨 Agent/仓库；
+- 只在当前 Agent 内复用，`uses` 的共享库除外；
 - 继承在加载后、schema 校验前展开，因此 IR 中看到的是已合并结果；
 - 投影到 Claude Code 时，嵌套子 Agent 无法表达，会给出 warning；
 - DSH/OpenAI 投影也不会自动展开嵌套关系。

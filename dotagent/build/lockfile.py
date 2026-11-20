@@ -79,6 +79,10 @@ def create_lock(compiled: CompiledAgent) -> dict:
         "agent": definition.metadata.name,
         "fingerprint": compiled.fingerprint,
         "sources": sources,
+        "uses": [
+            {"path": path, "version": version}
+            for path, version in definition.uses
+        ],
     }
 
 

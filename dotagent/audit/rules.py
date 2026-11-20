@@ -1,0 +1,88 @@
+"""Pluggable audit rules.
+
+Third-party rules register through the ``dotagent.audit_rules`` entry point and
+may be enabled/disabled or re-graded through ``.agents/audit.yaml`` just like the
+built-in rules.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from importlib.metadata import entry_points
+
+from dotagent.audit.base import AuditFinding
+from dotagent.audit.config import AuditConfig
+from dotagent.core.models import AgentDefinition
+
+
+class AuditRule(ABC):
+    code: str = ""
+    description: str = ""
+
+    @abstractmethod
+    def run(
+        self, definition: AgentDefinition, config: AuditConfig
+    ) -> list[AuditFinding]:
+        """Return findings for one agent definition."""
+
+
+_REGISTRY: dict[str, AuditRule] = {}
+_EXTERNAL_LOADED = False
+
+
+def register_audit_rule(rule: AuditRule) -> None:
+    if not rule.code:
+        raise ValueError("audit rule must declare a code")
+    _REGISTRY[rule.code] = rule
+
+
+def _load_external() -> None:
+    global _EXTERNAL_LOADED
+    if _EXTERNAL_LOADED:
+        return
+    _EXTERNAL_LOADED = True
+    try:
+        discovered = entry_points(group="dotagent.audit_rules")
+    except Exception:  # noqa: BLE001  # pragma: no cover - importlib edge cases
+        return
+    for entry in discovered:
+        try:
+            loaded = entry.load()
+            rule = loaded() if isinstance(loaded, type) else loaded
+        except Exception:  # noqa: BLE001,S112  # pragma: no cover - broken plugin
+            continue
+        if isinstance(rule, AuditRule) and rule.code:
+            _REGISTRY[rule.code] = rule
+
+
+def audit_rules() -> dict[str, AuditRule]:
+    _load_external()
+    return dict(_REGISTRY)
+
+
+def run_custom_rules(
+    definition: AgentDefinition, config: AuditConfig
+) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    for rule in audit_rules().values():
+        if not config.enabled(rule.code):
+            continue
+        try:
+            findings.extend(rule.run(definition, config))
+        except Exception as exc:  # noqa: BLE001 - a broken plugin must not crash audit
+            findings.append(
+                AuditFinding(
+                    rule.code,
+                    "warning",
+                    f"audit rule {rule.code} failed: {exc}",
+                )
+            )
+    return findings
+
+
+__all__ = [
+    "AuditRule",
+    "audit_rules",
+    "register_audit_rule",
+    "run_custom_rules",
+]

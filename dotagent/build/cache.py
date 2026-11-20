@@ -114,6 +114,9 @@ def incremental_status(
 
     if not lock or not Path(output_agent_json).is_file():
         return None
+    if lock.get("uses"):
+        # Shared-library contents are outside the stat scan; never trust a fast path.
+        return None
     sources = compute_hashes(project_root, spec_dir, read_cache(spec_dir))
     write_cache(spec_dir, sources)
     if not content_matches_lock(sources, lock):

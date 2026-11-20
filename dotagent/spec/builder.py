@@ -119,6 +119,11 @@ def build_agent(
         tool_count=limits_raw.get("tool_count"),
         subagent_count=limits_raw.get("subagent_count"),
     )
+    uses = tuple(
+        (str(item["path"]), item.get("version"))
+        for item in spec.get("uses") or ()
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    )
 
     definition = AgentDefinition(
         metadata=_metadata_from_document(manifest),
@@ -129,6 +134,7 @@ def build_agent(
         defaults=_items(spec.get("defaults")),
         limits=limits,
         settings=_items(spec.get("settings")),
+        uses=uses,
         mcp=_mcp_servers(source.mcp),
         knowledge=knowledge,
         skills=skills,

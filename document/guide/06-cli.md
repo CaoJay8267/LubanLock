@@ -76,10 +76,11 @@ dotagent project my-agent --target markdown -o ./dist/docs
 dotagent mcp discover my-agent
 dotagent mcp discover my-agent --server docs --write
 dotagent mcp discover my-agent --server docs --timeout 5 --json
+dotagent mcp discover my-agent --refresh --max-age 3600
 ```
 
 连接 MCP server，读取 `tools/list`；`--write` 把 schema 写到 `.agents/tools/`。
-仅支持 `stdio` 与 `http`。
+结果默认缓存 24 小时，`--refresh` 忽略缓存。仅支持 `stdio` 与 `http`（含 SSE 响应）。
 
 ## package / verify / keygen
 
@@ -92,7 +93,7 @@ dotagent keygen --out ./keys2 --rotate \
 dotagent package my-agent --sign-key ./keys/signing-key.pem \
   --sign-cert ./keys/signing.pem --verify
 dotagent verify ./dist/research-agent-0.1.0.zip \
-  --ca-cert ./keys/root-ca.pem --require-signature
+  --ca-cert ./keys/root-ca.pem --crl ./keys/revoked.crl --require-signature
 ```
 
 默认无签名，未签名包仍可复现。

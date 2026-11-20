@@ -155,6 +155,7 @@ def verify_package(
     *,
     public_key: str | Path | None = None,
     ca_cert: str | Path | tuple[str | Path, ...] | None = None,
+    crl: str | Path | tuple[str | Path, ...] | None = None,
     require_signature: bool = False,
 ) -> PackageVerification:
     """Check the structure, checksums, fingerprint and optional signature."""
@@ -194,7 +195,12 @@ def verify_package(
         anchors: tuple[str | Path, ...] = ()
         if ca_cert is not None:
             anchors = ca_cert if isinstance(ca_cert, tuple) else (ca_cert,)
-        if not signature.get("certificate") and anchors and public_key is None:
+        crls: tuple[str | Path, ...] = ()
+        if crl is not None:
+            crls = crl if isinstance(crl, tuple) else (crl,)
+        if crls and not signature.get("certificate"):
+            errors.append("--crl requires a certificate signature")
+        elif not signature.get("certificate") and anchors and public_key is None:
             errors.append("raw signature requires --public-key (not --ca-cert)")
         elif signature.get("certificate"):
             if anchors:
@@ -204,9 +210,12 @@ def verify_package(
                         signature,
                         public_key_path=public_key,
                         ca_cert_paths=anchors,
+                        crl_paths=crls,
                     )
                 except (PackageError, KeyError) as exc:
                     errors.append(str(exc))
+            elif crls:
+                errors.append("--crl requires --ca-cert")
         elif public_key is not None:
             try:
                 verify_manifest(

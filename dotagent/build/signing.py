@@ -320,6 +320,7 @@ def verify_manifest(
     *,
     public_key_path: str | Path | None = None,
     ca_cert_paths: tuple[str | Path, ...] = (),
+    crl_paths: tuple[str | Path, ...] = (),
 ) -> None:
     """Raise :class:`PackageError` when the signature does not verify."""
 
@@ -345,9 +346,11 @@ def verify_manifest(
         anchors: list = []
         for path in ca_cert_paths:
             anchors.extend(_load_certificates(path))
-        _validate_chain(leaf, intermediates, anchors)
+        _validate_chain(leaf, intermediates, anchors, crl_paths=crl_paths)
         public_key = leaf.public_key()
     else:
+        if crl_paths:
+            raise PackageError("--crl requires a certificate signature")
         if public_key_path is None:
             raise PackageError("signature requires --public-key")
         public_key = serialization.load_pem_public_key(
@@ -399,7 +402,60 @@ def _public_bytes(public_key) -> bytes:
     )
 
 
-def _validate_chain(leaf, intermediates: list, anchors: list) -> None:
+def _check_revocations(chain: list, anchors: list, crl_paths) -> None:
+    crypto = _crypto()
+    x509 = crypto["x509"]
+    now = datetime.now(UTC)
+    all_certificates = [*chain, *anchors]
+    crls = []
+    for path in crl_paths:
+        data = Path(path).read_bytes()
+        try:
+            crl = x509.load_pem_x509_crl(data)
+        except ValueError:
+            try:
+                crl = x509.load_der_x509_crl(data)
+            except ValueError as exc:
+                raise PackageError(f"cannot load CRL {path}: {exc}") from exc
+        crls.append(crl)
+    leaf = chain[0]
+    covered = False
+    for crl in crls:
+        issuer = next(
+            (certificate for certificate in all_certificates if certificate.subject == crl.issuer),
+            None,
+        )
+        if issuer is None:
+            continue
+        covered = covered or issuer.subject == leaf.issuer
+        try:
+            valid = crl.is_signature_valid(issuer.public_key())
+        except AttributeError:  # pragma: no cover - older cryptography
+            try:
+                issuer.public_key().verify(crl.signature, crl.tbs_certlist_bytes)
+                valid = True
+            except Exception:  # noqa: BLE001 - cryptography fallback
+                valid = False
+        if not valid:
+            raise PackageError(f"CRL issued by {issuer.subject.rfc4514_string()} has an invalid signature")
+        last_update = getattr(crl, "last_update_utc", None)
+        next_update = getattr(crl, "next_update_utc", None)
+        if last_update is not None and now < last_update:
+            raise PackageError("CRL is not valid yet")
+        if next_update is not None and now > next_update:
+            raise PackageError("CRL has expired")
+        for certificate in chain:
+            if certificate.issuer != crl.issuer:
+                continue
+            if crl.get_revoked_certificate_by_serial_number(certificate.serial_number):
+                raise PackageError(
+                    f"certificate serial {certificate.serial_number} has been revoked"
+                )
+    if not covered:
+        raise PackageError("provided CRLs do not cover the signing certificate")
+
+
+def _validate_chain(leaf, intermediates: list, anchors: list, crl_paths=()) -> None:
     crypto = _crypto()
     x509 = crypto["x509"]
     now = datetime.now(UTC)
@@ -413,6 +469,8 @@ def _validate_chain(leaf, intermediates: list, anchors: list) -> None:
         assert not_before is not None and not_after is not None
         if not (not_before <= now <= not_after):
             raise PackageError(f"certificate is not valid now (chain index {index})")
+    if crl_paths:
+        _check_revocations(chain, anchors, crl_paths)
     if any(
         isinstance(extension.value, x509.BasicConstraints) and extension.value.ca
         for extension in leaf.extensions

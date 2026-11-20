@@ -42,10 +42,11 @@ dotagent mcp discover research-agent --server docs --write --json
 ```
 
 - 支持 `stdio` 与 `http`；
+- HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；旧版 SSE 传输/WebSocket 不支持；
 - `sse` / `ws` 会明确报告不支持，不会猜测；
 - 生成 `.agents/tools/<server>-<tool>.yaml`，`source.ref = "<server>/<tool>"`；
 - 不执行发现的工具，只导入 schema；
-- stdio 命令不经 shell，带超时、输出大小和工具数量限制；
+- 结果缓存在 `.agents/.cache/mcp/`；`--refresh` 强制刷新，`--max-age` 设置 TTL；
 - 已在 `mcp.json` 中声明但无法连接时，会给出 warning，不影响其他 server。
 
 ## 工具与 MCP 的关联

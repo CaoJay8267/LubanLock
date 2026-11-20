@@ -133,6 +133,7 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("package")
     verify.add_argument("--public-key")
     verify.add_argument("--ca-cert", action="append", default=[])
+    verify.add_argument("--crl", action="append", default=[], help="CRL (PEM/DER)")
     verify.add_argument("--require-signature", action="store_true")
     verify.add_argument("--json", action="store_true")
     verify.set_defaults(func=cmd_verify)
@@ -178,6 +179,12 @@ def _parser() -> argparse.ArgumentParser:
     mcp_discover.add_argument("--server", action="append", default=[])
     mcp_discover.add_argument("--write", action="store_true", help="write tool declarations")
     mcp_discover.add_argument("--timeout", type=float, default=10.0)
+    mcp_discover.add_argument(
+        "--refresh", action="store_true", help="ignore the discovery cache"
+    )
+    mcp_discover.add_argument(
+        "--max-age", type=float, default=86400.0, help="cache TTL in seconds"
+    )
     mcp_discover.add_argument("--json", action="store_true")
     mcp_discover.set_defaults(func=cmd_mcp_discover)
 
@@ -438,6 +445,7 @@ def cmd_verify(args) -> int:
         args.package,
         public_key=args.public_key,
         ca_cert=tuple(args.ca_cert or ()),
+        crl=tuple(args.crl or ()),
         require_signature=args.require_signature,
     )
     if args.json:
@@ -620,7 +628,11 @@ def cmd_mcp_discover(args) -> int:
     target = _target(args.path, args.resource)
     definition = load_agent(target)
     report = discover_agent(
-        definition, servers=tuple(args.server or ()), timeout=args.timeout
+        definition,
+        servers=tuple(args.server or ()),
+        timeout=args.timeout,
+        refresh=args.refresh,
+        max_age=args.max_age,
     )
     if args.write:
         report = import_tools(definition, report)

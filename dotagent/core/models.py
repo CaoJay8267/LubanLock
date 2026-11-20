@@ -308,6 +308,7 @@ class AgentDefinition:
     defaults: tuple[tuple[str, object], ...] = ()
     limits: Limits = field(default_factory=Limits)
     settings: tuple[tuple[str, object], ...] = ()
+    uses: tuple[tuple[str, str | None], ...] = ()
     mcp: tuple[tuple[str, dict], ...] = ()
     knowledge: tuple[Knowledge, ...] = ()
     skills: tuple[Skill, ...] = ()
@@ -369,6 +370,10 @@ class AgentDefinition:
                 "defaults": dict(self.defaults),
                 "limits": self.limits.to_dict(),
                 "settings": dict(self.settings),
+                "uses": [
+                    _drop_empty({"path": path, "version": version})
+                    for path, version in self.uses
+                ],
                 "mcp": {"mcpServers": dict(self.mcp)} if self.mcp else None,
                 "knowledge": {item.metadata.name: item.to_dict() for item in self.knowledge},
                 "skills": {item.name: item.to_dict() for item in self.skills},

@@ -5,7 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from dotagent._version import __version__
-from dotagent.audit import AuditReport, audit_agent, visualize_agent
+from dotagent.audit import (
+    AuditConfig,
+    AuditReport,
+    AuditRule,
+    audit_agent,
+    register_audit_rule,
+    visualize_agent,
+)
 from dotagent.build.compiler import (
     Asset,
     CompiledAgent,
@@ -121,7 +128,9 @@ __all__ = [
     "AgentRuntime",
     "AgentSource",
     "Asset",
+    "AuditConfig",
     "AuditReport",
+    "AuditRule",
     "CompiledAgent",
     "DotAgentError",
     "DshImportReport",
@@ -169,6 +178,7 @@ __all__ = [
     "project_agent",
     "read_compiled_json",
     "read_lock",
+    "register_audit_rule",
     "resolve_agent_layout",
     "resolve_agent_root",
     "resolve_agent_target",

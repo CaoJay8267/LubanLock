@@ -39,6 +39,28 @@
           }
         },
         "limits": { "$ref": "#/$defs/limits" },
+        "uses": {
+          "type": "array",
+          "description": "Explicit cross-agent shared libraries. Imported tools/models are merged into this agent.",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            }
+          }
+        },
         "settings": {
           "type": "object",
           "description": "Host-specific settings. DotAgent stores them verbatim and never interprets them."

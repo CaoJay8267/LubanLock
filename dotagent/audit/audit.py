@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from dotagent.audit.base import AuditFinding
 from dotagent.audit.config import AuditConfig, load_audit_config
+from dotagent.audit.rules import run_custom_rules
 from dotagent.build.compiler import compile_agent
 from dotagent.core.errors import Diagnostic
 from dotagent.core.models import AgentDefinition
@@ -29,23 +31,6 @@ _SECRET_PATTERNS = (
 )
 
 _DEFAULT_RISKY_TOOL_NAMES = ("shell", "exec", "bash", "powershell", "cmd", "run_command")
-
-
-@dataclass(frozen=True)
-class AuditFinding:
-    code: str
-    severity: str  # error | warning | info
-    message: str
-    path: str | None = None
-    pointer: str = ""
-
-    def to_dict(self) -> dict:
-        data = {"code": self.code, "severity": self.severity, "message": self.message}
-        if self.path:
-            data["path"] = self.path
-        if self.pointer:
-            data["pointer"] = self.pointer
-        return data
 
 
 @dataclass(frozen=True)
@@ -131,6 +116,7 @@ def audit_agent(
     if definition is not None:
         stats = _stats(definition)
         findings.extend(_heuristic_findings(definition, config))
+        findings.extend(run_custom_rules(definition, config))
         try:
             compiled = compile_agent(path)
             fingerprint = compiled.fingerprint

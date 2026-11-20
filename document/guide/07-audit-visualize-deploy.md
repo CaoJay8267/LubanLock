@@ -56,6 +56,21 @@ ignore_paths: ['knowledge/private/*']
 - `ignore_paths` 使用 glob 过滤发现项；
 - 配置本身先做 schema 校验，非法 regex 会报 `DTA308`。
 
+第三方规则通过 `dotagent.audit_rules` entry point 注册：
+
+```python
+from dotagent.audit import AuditFinding, AuditRule
+
+
+class MyRule(AuditRule):
+    code = "AUD900"
+
+    def run(self, definition, config):
+        return [AuditFinding("AUD900", "warning", "custom check")]
+```
+
+安装后在 `audit.yaml` 中用 `AUD900` 开关或调级即可。
+
 ## 可视化
 
 ```bash

@@ -4,6 +4,33 @@ All notable changes to DotAgent are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.0 — 2026-11-20
+
+Optional capabilities release.
+
+### Added
+
+- Cross-agent shared libraries via `spec.uses` with SemVer constraints;
+  tools/models are imported explicitly and duplicate names are rejected.
+- MCP discovery cache (`--refresh`, `--max-age`) and SSE response parsing.
+- CRL verification (`dotagent verify --crl`).
+- DSH projection maps known tool names to DSH tool plugins.
+- OpenAI projection generates `tools.py` handlers for simple JSON schemas.
+- Pluggable audit rules through the `dotagent.audit_rules` entry point.
+- Tests for shared libraries, MCP cache/HTTP, CRL revocation, DSH mapping,
+  OpenAI handlers and custom audit rules.
+
+### Changed
+
+- Incremental compilation is disabled for agents that use shared libraries,
+  because library files are outside the project stat scan.
+
+### Limitations
+
+- Shared libraries import tools/models only; skills/knowledge are not copied.
+- Old SSE transport, WebSocket, OCSP and trusted timestamps are not implemented.
+- DSH skill/MCP/subagent mapping and OpenAI complex-schema handlers remain manual.
+
 ## 0.3.1 — 2026-11-20
 
 Hardening release; no schema changes.

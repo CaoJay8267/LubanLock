@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dotagent"
-version = "0.3.1"
+version = "0.4.0"
 description = "Declarative, portable agent definitions built from AGENTS.md + .agents/"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,6 +42,10 @@ dotagent = "dotagent.cli:main"
 
 [project.entry-points."dotagent.runtime_adapters"]
 # Third-party runtime adapters register here.
+
+[project.entry-points."dotagent.audit_rules"]
+# Third-party audit rules register here, e.g.
+# myrule = "my_package:MyRule"
 
 [tool.setuptools]
 packages = [

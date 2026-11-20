@@ -1,4 +1,4 @@
-# DotAgent 架构与决策记录（v0.3.1）
+# DotAgent 架构与决策记录（v0.4.0）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
 > `dotagent/` 源码与 `tests/` 为准。
@@ -315,7 +315,8 @@ skills: [citation-format]
 - 握手：`initialize` → `notifications/initialized` → `tools/list`（支持 cursor 分页）；
 - 工具 `inputSchema` 经 DotAgent schema 子集 lint 后写入 `.agents/tools/<server>-<tool>.yaml`，
   `source = {kind: mcp, ref: "<server>/<tool>"}`；
-- `sse`/`ws` 明确报告 unsupported；不执行工具，只导入 schema；
+- `sse`/`ws` 传输仍报告 unsupported；HTTP 响应支持 JSON 与 `text/event-stream`；
+- 发现结果缓存到 `.agents/.cache/mcp/<server>.json`，`--refresh`/`--max-age` 控制；
 - stdio 命令不经 shell，带超时、输出大小与工具数量上限；`${VAR}` 做环境变量展开。
 
 ### 5.3 内容哈希缓存
@@ -324,6 +325,8 @@ skills: [citation-format]
 - `.agents/.cache/sources.json` 缓存 `(size, mtime_ns, sha256)`；
 - `compile --incremental`：stat 命中缓存则复用哈希；mtime 变但内容哈希相同也视为未变；
   只有哈希或锁不一致才重建；
+- `.agents/.cache/mcp/<server>.json` 缓存 MCP 发现结果，`--refresh`/`--max-age` 控制；
+- 含 `spec.uses` 共享库的工程禁用增量快速路径（库内容不在 stat 扫描内）；
 - 缓存目录被 loader 与 lock 扫描忽略，不进入产物。
 
 ### 5.4 证书链与密钥轮换
@@ -331,14 +334,17 @@ skills: [citation-format]
 - `keygen --chain`：Ed25519 root CA → signing 证书；`package --sign-key --sign-cert`；
 - `signature.json` 携带叶证书与中间链；验证时用 `--ca-cert` 作为 trust anchor；
 - 验证：有效期、issuer/subject、BasicConstraints、KeyUsage、Ed25519 签名；
+- `--crl` 校验 CRL 签名、有效期与叶证书序列号；OCSP/可信时间戳未实现；
 - `keygen --rotate` 在既有 root 下签发新叶证书，旧/新包共享同一 trust anchor；
 - 默认仍无签名，未签名包保持字节级可复现；证书链仅支持 Ed25519。
 
 ### 5.5 新投影与导入
 
 - `dsh`：输出 DSH bundle（`package.json` + `cordis.patch.yml`），声明
-  `@deepseek-ai/dsh-agent-preset`，persona 前缀来自 `AGENTS.md`；工具/技能/MCP 不映射并 warning；
-- `openai`：OpenAI Agents SDK `agent.py` 脚手架 + `tools.json`，不生成 handler；
+  `@deepseek-ai/dsh-agent-preset`，persona 前缀来自 `AGENTS.md`；已知工具名映射到
+  DSH 工具插件，未知工具/技能/MCP/子 Agent 仍 warning；
+- `openai`：OpenAI Agents SDK `agent.py` + `tools.py` 脚手架；简单标量/字符串数组
+  schema 生成 handler 骨架，复杂 schema 只保留在 `tools.json`；
 - `openai-chat`：Chat Completions 请求骨架（model/messages/tools）；
 - `import --from dsh`：旧版 preset 目录与新版 patch 均可导入；
 - `import --from openai`：读取 `openai-chat.json`，或用 `ast` 解析 `agent.py` 中的字面量
@@ -355,25 +361,36 @@ skills: [citation-format]
 - `ignore_paths`（glob）。
 
 配置先经 schema 校验，再应用于审计发现；非法 regex 报 `DTA308`。
+第三方规则通过 `dotagent.audit_rules` entry point 注册，实现 `AuditRule`
+（`code` + `run`），与内置规则共享开关和调级。
 
-## 6. v0.3 验证记录
+### 5.7 跨 Agent 共享库
 
-- 单元测试：`python -m unittest discover -s tests -t tests`（120 个用例，全部通过）；
-- 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过；
+- `spec.uses` 显式列出另一工程的路径与可选 SemVer 约束；
+- 只导入 `tools`/`models`（无资产，避免跨工程拷贝）；
+- 版本读取被引用工程的 `metadata.version`，支持 `>= <= > < == != ~= ^`；
+- 名称冲突报 `DTA333`；版本不匹配报 `DTA331`；无效约束报 `DTA332`；
+- 含共享库的工程禁用增量快速路径，`--locked` 仍通过指纹检测库变化。
+
+## 6. v0.4 验证记录
+
+- 单元测试：`python -m unittest discover -s tests -t tests`（127 个用例，全部通过）；
+- 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过（47 个源文件）；
 - 示例通过 validate、15 项测试、determinism、package、audit、visualize；
-- 证书链：root 签名验证、旋转后新旧包验证、错误 root 拒绝；
-- MCP：临时 stdio server 的 `initialize`/`tools/list` 与 schema 导入通过；
-- DSH/OpenAI：投影结构、Python 脚手架语法、DSH preset 导入通过；
+- 证书链：root 签名验证、旋转后新旧包验证、错误 root 拒绝、CRL 吊销拒绝；
+- MCP：stdio/HTTP 发现、schema 导入、发现缓存与 TTL 通过；
+- DSH/OpenAI：工具映射、Python 脚手架语法、DSH preset 导入通过；
+- 共享库：导入、版本约束、重名冲突与增量禁用通过；
 - 缓存：touch 不变内容仍可复用，内容变化触发重建。
 
-## 7. v0.3 之后的候选（非阻断）
+## 7. 后续候选（非阻断）
 
-1. 跨 Agent 共享库与版本约束（当前 `extends`/`uses` 只在单 Agent 内）。
-2. MCP 的 HTTP/SSE 完整支持、增量发现与连接缓存（当前 stdio 已测，HTTP 基础实现未覆盖测试）。
-3. 证书吊销（CRL/OCSP）与签名时间戳。
-4. DSH/OpenAI 的更深映射（工具、技能、子 Agent；当前 DSH 只映射 persona，OpenAI 只生成脚手架）。
-5. 审计规则插件化与按类别分组。
-6. CI 矩阵、覆盖率、类型检查与发布流水线。
+1. 跨 Agent 共享库支持技能/知识等带资产的实体，并把外部文件纳入锁。
+2. MCP 旧版 SSE 传输与 WebSocket 客户端。
+3. OCSP、CRL 分发点自动获取、可信时间戳（RFC 3161）。
+4. DSH 技能/MCP/子 Agent 的完整映射（需要对应插件配置 schema）。
+5. OpenAI 复杂 schema/handoff 的 handler 生成。
+6. 审计规则按类别分组与规则参数 schema。
 
 ## 8. v0.2 基线记录
 
@@ -401,6 +418,10 @@ skills: [citation-format]
 | ADR-16 | MCP 发现只导入 schema | 不执行工具、不联网推理 | HTTP/SSE 覆盖有限 |
 | ADR-17 | 证书链信任锚由验证方提供 | 支持轮换、默认无签名 | 无吊销/时间戳 |
 | ADR-18 | 审计规则数据化 | 可配置、无需插件即可调 | 规则能力受内置实现限制 |
+| ADR-19 | 共享库用显式路径 + SemVer | 无隐式发现、可离线判定 | 只导入工具/模型 |
+| ADR-20 | MCP 发现结果缓存 | 减少重复启动 server | 需 TTL/刷新 |
+| ADR-21 | CRL 由验证方提供 | 不依赖网络、可离线 | 无 OCSP/时间戳 |
+| ADR-22 | 审计规则 entry point | 第三方规则与内置规则同权 | 插件错误需容错 |
 
 ## 10. 非目标落实
 
@@ -437,17 +458,17 @@ my-host = "my_package:MyHostAdapter"
 ## 12. 已知限制 / TODO
 
 - 子 Agent 仅单文件；不能有独立 `.agents/agents/<name>/` 目录、独立知识/技能。
-- `extends`/`uses` 只在当前 Agent 内；无跨 Agent 共享库，无版本约束。
+- 共享库只导入工具/模型，不含技能/知识等资产；外部文件不进入锁，含库工程禁用增量。
 - 工作流无条件边/数据映射/重试/循环；这些属于宿主执行语义。
 - 知识按原样注入，无检索/分块/token 精确计数。
 - 投影不清理旧文件；重复投影建议空目录。
-- 证书链支持签名与轮换，但没有吊销、OCSP、时间戳；仅 Ed25519。
+- 证书链支持签名、轮换与 CRL；没有 OCSP、CRL 分发点自动获取、可信时间戳；仅 Ed25519。
 - JSON Schema 子集不含 `unevaluatedProperties`、`$dynamicRef`、`contentEncoding` 等。
-- 审计是启发式，规则可配置但没有自定义规则插件。
-- DSH 投影只映射 persona；OpenAI 投影只生成 Agent 脚手架，不生成 handler。
+- 审计规则可配置、可插件化，但没有规则参数 schema 与按类别分组。
+- DSH 映射已知工具插件；技能/MCP/子 Agent 仍需手动配置。
+- OpenAI 只为简单 schema 生成 handler；复杂 schema/handoff 不生成。
 - `openai` 导入只处理字面量 `Agent(...)` 与 `openai-chat.json`，不执行/不推导任意 Python。
-- MCP 支持 stdio 与基础 HTTP JSON-RPC；SSE/WS 明确不支持，HTTP 路径缺少集成测试。
-- 无 CI、覆盖率门禁、类型检查与正式发布流程；当前验证依赖本地测试。
+- MCP 支持 stdio 与 HTTP JSON-RPC（含 SSE 响应）；旧版 SSE 传输与 WebSocket 不支持。
 - 旧布局 `.agent/` 与 `subagents/` 仍可读，但仅作为兼容路径。
 
 ## 13. 旧版验证记录（v0.2）

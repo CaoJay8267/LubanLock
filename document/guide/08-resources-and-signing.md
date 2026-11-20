@@ -60,11 +60,13 @@ dotagent package research-agent \
   --sign-cert ./keys/signing.pem
 
 dotagent verify dist/research-agent-0.1.0.zip \
-  --ca-cert ./keys/root-ca.pem --require-signature
+  --ca-cert ./keys/root-ca.pem --crl ./keys/revoked.crl --require-signature
 ```
 
 - `signature.json` 携带叶证书与中间链；
 - 校验会检查有效期、issuer/subject、CA 约束、KeyUsage 和 Ed25519 签名；
+- `--crl` 接受 PEM/DER，校验 CRL 签名、有效期和叶证书序列号；
+- OCSP 与可信时间戳尚未实现；
 - 证书链仅支持 Ed25519。
 
 ### 密钥轮换

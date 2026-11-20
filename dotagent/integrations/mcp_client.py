@@ -13,9 +13,11 @@ import queue
 import re
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import yaml
 
@@ -28,6 +30,7 @@ from dotagent.spec.schema import lint_json_schema
 PROTOCOL_VERSION = "2024-11-05"
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 MAX_TOOLS = 200
+MCP_CACHE_FORMAT = "dotagent-mcp-cache/1"
 
 
 @dataclass(frozen=True)
@@ -375,6 +378,8 @@ def discover_agent(
     *,
     servers: tuple[str, ...] = (),
     timeout: float = 10.0,
+    refresh: bool = False,
+    max_age: float = 86_400.0,
 ) -> McpImportReport:
     selected = [
         (name, config)
@@ -386,11 +391,81 @@ def discover_agent(
     discoveries: list[McpDiscovery] = []
     warnings: list[str] = []
     for name, config in selected:
+        cached = None if refresh else _read_cache(definition, name, max_age)
+        if cached is not None:
+            discoveries.append(cached)
+            continue
         try:
-            discoveries.append(discover_server(name, config, timeout=timeout))
+            discovery = discover_server(name, config, timeout=timeout)
+            discoveries.append(discovery)
+            _write_cache(definition, discovery)
         except PackageError as exc:
             warnings.append(f"{name}: {exc}")
     return McpImportReport(discoveries=tuple(discoveries), warnings=tuple(warnings))
+
+
+def _cache_path(definition: AgentDefinition, server: str) -> Path:
+    return definition.spec_dir / ".cache" / "mcp" / f"{slugify(server)}.json"
+
+
+def _read_cache(
+    definition: AgentDefinition, server: str, max_age: float
+) -> McpDiscovery | None:
+    path = _cache_path(definition, server)
+    if not path.is_file():
+        return None
+    try:
+        if time.time() - path.stat().st_mtime > max_age:
+            return None
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(document, dict) or document.get("format") != MCP_CACHE_FORMAT:
+        return None
+    tools: list[McpToolInfo] = []
+    for raw in document.get("tools") or ():
+        if not isinstance(raw, dict):
+            continue
+        schema = raw.get("inputSchema")
+        if not isinstance(schema, dict):
+            continue
+        tools.append(
+            McpToolInfo(
+                name=str(raw.get("name") or ""),
+                description=str(raw.get("description") or ""),
+                input_schema=schema,
+                output_schema=None,
+                annotations={},
+            )
+        )
+    return McpDiscovery(
+        server=server,
+        transport=str(document.get("transport") or ""),
+        tools=tuple(tools),
+        warnings=tuple(str(item) for item in document.get("warnings") or ()),
+    )
+
+
+def _write_cache(definition: AgentDefinition, discovery: McpDiscovery) -> None:
+    path = _cache_path(definition, discovery.server)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "format": MCP_CACHE_FORMAT,
+        "server": discovery.server,
+        "transport": discovery.transport,
+        "tools": [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "inputSchema": tool.input_schema,
+            }
+            for tool in discovery.tools
+        ],
+        "warnings": list(discovery.warnings),
+    }
+    path.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def import_tools(

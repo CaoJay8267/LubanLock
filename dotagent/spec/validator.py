@@ -11,6 +11,7 @@ from dotagent.core.graph import topological_order
 from dotagent.core.models import AgentDefinition, Workflow
 from dotagent.spec.builder import build_agent
 from dotagent.spec.inheritance import resolve_all_entities
+from dotagent.spec.libraries import attach_libraries
 from dotagent.spec.loader import AgentSource, RawEntity
 from dotagent.spec.schema import (
     AGENT_SCHEMA,
@@ -45,6 +46,8 @@ def validate_source(source: AgentSource) -> tuple[ValidationResult, AgentDefinit
                 source.mcp, MCP_SCHEMA, path=source.mcp_rel or "mcp.json"
             )
         )
+    if manifest_valid:
+        attach_libraries(source, manifest, result.diagnostics)
     resolved_entities, inheritance_diagnostics = resolve_all_entities(
         source.entities
     )
