@@ -21,6 +21,8 @@ _SEVERITIES = {"error", "warning", "info"}
 class RuleSetting:
     enabled: bool = True
     severity: str | None = None
+    category: str | None = None
+    parameters: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,16 @@ class AuditConfig:
         if setting is not None and setting.severity:
             return setting.severity
         return default
+
+    def category(self, code: str, default: str | None = None) -> str | None:
+        setting = self.rules.get(code)
+        if setting is not None and setting.category:
+            return setting.category
+        return default
+
+    def parameters(self, code: str) -> dict:
+        setting = self.rules.get(code)
+        return dict(setting.parameters) if setting is not None else {}
 
     def ignored(self, path: str | None) -> bool:
         if not path:
@@ -68,9 +80,13 @@ def load_audit_config(spec_dir: str | Path) -> tuple[AuditConfig, list[Diagnosti
         if not isinstance(value, dict):
             continue
         severity = value.get("severity")
+        category = value.get("category")
+        parameters = value.get("parameters")
         rules[str(code)] = RuleSetting(
             enabled=bool(value.get("enabled", True)),
             severity=severity if severity in _SEVERITIES else None,
+            category=str(category) if isinstance(category, str) and category else None,
+            parameters=parameters if isinstance(parameters, dict) else {},
         )
     patterns = tuple(str(item) for item in document.get("secret_patterns") or ())
     for pattern in patterns:

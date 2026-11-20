@@ -84,7 +84,8 @@ spec:
 - 路径相对当前工程；
 - 被引用工程的 `metadata.version` 必须满足约束；
 - 支持 `>= <= > < == != ~= ^`，逗号组合；
-- 只导入 `tools` 与 `models`；技能/知识不跨工程复制；
+- 只导入 `tools`、`models`、`skills` 与 `knowledge`；
+- 技能/知识资产以 `libraries/<name>/...` 进入编译产物与锁文件；
 - 重名报 `DTA333`，不静默覆盖；
 - 含共享库的工程不做增量快速路径，`--locked` 仍可检测变化。
 

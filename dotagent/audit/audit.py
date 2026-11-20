@@ -53,6 +53,14 @@ class AuditReport:
             result[finding.severity] = result.get(finding.severity, 0) + 1
         return result
 
+    def categories(self) -> dict[str, dict[str, int]]:
+        result: dict[str, dict[str, int]] = {}
+        for finding in self.findings:
+            category = finding.category or "other"
+            bucket = result.setdefault(category, {"error": 0, "warning": 0, "info": 0})
+            bucket[finding.severity] = bucket.get(finding.severity, 0) + 1
+        return result
+
     def to_dict(self) -> dict:
         return {
             "agent": self.agent,
@@ -61,6 +69,7 @@ class AuditReport:
             "generatedAt": self.generated_at,
             "ok": self.ok,
             "counts": self.counts(),
+            "categories": self.categories(),
             "stats": self.stats,
             "findings": [finding.to_dict() for finding in self.findings],
         }
@@ -98,7 +107,13 @@ class AuditReport:
                     f"| {finding.severity} | `{finding.code}` | {location} | {message} |"
                 )
         lines.append("")
-        return "\n".join(lines)
+        lines.extend(["## 分类", "", "| 类别 | error | warning | info |", "| --- | --- | --- | --- |"])
+        for category, bucket in sorted(self.categories().items()):
+            lines.append(
+                f"| {category} | {bucket.get('error', 0)} | "
+                f"{bucket.get('warning', 0)} | {bucket.get('info', 0)} |"
+            )
+        return "\n".join(lines) + "\n"
 
 
 def audit_agent(
@@ -164,13 +179,29 @@ def _apply_config(
                 message=finding.message,
                 path=finding.path,
                 pointer=finding.pointer,
+                category=config.category(
+                    finding.code, finding.category or _default_category(finding.code)
+                ),
             )
         )
     return filtered
 
 
-def _from_diagnostic(diagnostic: Diagnostic) -> AuditFinding:
-    return AuditFinding(
+def _default_category(code: str) -> str:
+    if code.startswith(("AUD00", "AUD01")):
+        return "security"
+    if code.startswith(("AUD1", "DTA4")):
+        return "limits"
+    if code.startswith("DTA3"):
+        return "references"
+    if code.startswith("DTA5"):
+        return "projection"
+    if code.startswith(("DTA1", "DTA2", "DTA6")):
+        return "schema"
+    return "general"
+
+
+def _from_diagnostic(diagnostic: Diagnostic) -> AuditFinding:    return AuditFinding(
         code=diagnostic.code,
         severity=diagnostic.severity.value,
         message=diagnostic.message,

@@ -66,7 +66,11 @@ dotagent verify dist/research-agent-0.1.0.zip \
 - `signature.json` 携带叶证书与中间链；
 - 校验会检查有效期、issuer/subject、CA 约束、KeyUsage 和 Ed25519 签名；
 - `--crl` 接受 PEM/DER，校验 CRL 签名、有效期和叶证书序列号；
-- OCSP 与可信时间戳尚未实现；
+- `--fetch-crl` 从 CRL 分发点自动获取；
+- `--ocsp` 检查 OCSP，`--ocsp-url` 可覆盖证书中的 responder URL；
+- `--timestamp-cert` 验证 RFC 3161 时间戳；获取时间戳用
+  `dotagent package ... --timestamp-url URL`（需要 `dotagent[timestamp]`）；
+- 时间戳会破坏签名包的可复现性；
 - 证书链仅支持 Ed25519。
 
 ### 密钥轮换

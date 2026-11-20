@@ -41,9 +41,9 @@ dotagent mcp discover research-agent --write
 dotagent mcp discover research-agent --server docs --write --json
 ```
 
-- 支持 `stdio` 与 `http`；
-- HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；旧版 SSE 传输/WebSocket 不支持；
-- `sse` / `ws` 会明确报告不支持，不会猜测；
+- 支持 `stdio`、`http`、旧版 `sse` 与 `ws`；
+- HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；旧版 SSE 使用 GET 流 + POST endpoint；
+- WebSocket 需要 `dotagent[mcp]`；
 - 生成 `.agents/tools/<server>-<tool>.yaml`，`source.ref = "<server>/<tool>"`；
 - 不执行发现的工具，只导入 schema；
 - 结果缓存在 `.agents/.cache/mcp/`；`--refresh` 强制刷新，`--max-age` 设置 TTL；

@@ -4,6 +4,31 @@ All notable changes to DotAgent are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0 — 2026-11-20
+
+### Added
+
+- Shared libraries now import skills and knowledge assets under a
+  `libraries/<name>/...` namespace; lockfiles include external library files.
+- MCP legacy SSE transport and WebSocket client (`dotagent[mcp]`).
+- CRL distribution-point fetching, OCSP checking, and optional RFC 3161
+  timestamps (`dotagent[timestamp]`).
+- DSH projection maps skills, MCP manager servers, and subagent plugins.
+- OpenAI projection uses `FunctionTool` for complex schemas and emits
+  `handoffs` for direct child agents.
+- Audit rules support categories and a JSON Schema-validated `parameters` map.
+
+### Changed
+
+- `dotagent verify` gained `--fetch-crl`, `--ocsp`, `--ocsp-url`,
+  `--timestamp-cert` and `--require-timestamp`.
+
+### Limitations
+
+- DSH subagent instructions and workflows/tasks remain manual.
+- OCSP/TSA responses are not cached; timestamp requests make signed packages
+  non-reproducible.
+
 ## 0.4.0 — 2026-11-20
 
 Optional capabilities release.

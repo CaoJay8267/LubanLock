@@ -62,16 +62,48 @@ def scan_sources(project_root: Path, spec_dir: Path) -> dict[str, dict]:
     return dict(sorted(result.items()))
 
 
+def _library_source_paths(definition) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    for name, root in definition.library_roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            relative_parts = path.relative_to(root).parts
+            if any(
+                part in _SKIP_PARTS
+                or (part.startswith(".") and part not in {".agents", ".agent"})
+                for part in relative_parts
+            ):
+                continue
+            rel = f"libraries/{name}/{to_posix(path.relative_to(root))}"
+            paths[rel] = path
+    return paths
+
+
+def _source_path(definition, rel: str) -> Path:
+    if rel.startswith("libraries/"):
+        parts = Path(rel).parts
+        roots = dict(definition.library_roots)
+        if len(parts) >= 3 and parts[1] in roots:
+            return roots[parts[1]] / "/".join(parts[2:])
+    return definition.root / rel
+
+
 def create_lock(compiled: CompiledAgent) -> dict:
     definition = compiled.definition
     stats = scan_sources(definition.root, definition.spec_dir)
+    paths = {rel: _source_path(definition, rel) for rel in stats}
+    paths.update(_library_source_paths(definition))
     sources: dict[str, dict] = {}
-    for rel, stat in stats.items():
-        data = (definition.root / rel).read_bytes()
+    for rel, path in sorted(paths.items()):
+        data = path.read_bytes()
+        stat = path.stat()
         sources[rel] = {
             "sha256": sha256_bytes(data),
-            "size": stat["size"],
-            "mtime_ns": stat["mtime_ns"],
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
         }
     return {
         "format": LOCK_FORMAT,
@@ -124,6 +156,15 @@ def check_lock(compiled: CompiledAgent, lock: dict) -> list[str]:
     if not isinstance(sources, dict):
         return problems + ["lockfile has no sources object"]
     current = scan_sources(compiled.definition.root, compiled.definition.spec_dir)
+    current.update(
+        {
+            rel: {
+                "size": path.stat().st_size,
+                "mtime_ns": path.stat().st_mtime_ns,
+            }
+            for rel, path in _library_source_paths(compiled.definition).items()
+        }
+    )
     if set(current) != set(sources):
         missing = sorted(set(sources) - set(current))
         added = sorted(set(current) - set(sources))
@@ -134,7 +175,7 @@ def check_lock(compiled: CompiledAgent, lock: dict) -> list[str]:
     for rel, meta in sources.items():
         if rel not in current:
             continue
-        data = (compiled.definition.root / rel).read_bytes()
+        data = _source_path(compiled.definition, rel).read_bytes()
         if not isinstance(meta, dict) or meta.get("sha256") != sha256_bytes(data):
             problems.append(f"source hash mismatch: {rel}")
     return problems

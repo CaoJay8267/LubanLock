@@ -93,7 +93,8 @@ dotagent keygen --out ./keys2 --rotate \
 dotagent package my-agent --sign-key ./keys/signing-key.pem \
   --sign-cert ./keys/signing.pem --verify
 dotagent verify ./dist/research-agent-0.1.0.zip \
-  --ca-cert ./keys/root-ca.pem --crl ./keys/revoked.crl --require-signature
+  --ca-cert ./keys/root-ca.pem --fetch-crl --ocsp \
+  --timestamp-cert ./keys/tsa.pem --require-signature
 ```
 
 默认无签名，未签名包仍可复现。

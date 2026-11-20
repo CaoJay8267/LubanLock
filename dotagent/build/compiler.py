@@ -142,10 +142,17 @@ def _collect_assets(definition: AgentDefinition) -> tuple[Asset, ...]:
             paths.add(task.prompt.file)
 
     collected: dict[str, bytes] = {}
+    library_roots = dict(definition.library_roots)
     for relative in sorted(paths):
         base = definition.root if relative == "AGENTS.md" else definition.spec_dir
+        source_relative = relative
+        if relative.startswith("libraries/"):
+            parts = Path(relative).parts
+            if len(parts) >= 3 and parts[1] in library_roots:
+                base = library_roots[parts[1]]
+                source_relative = "/".join(parts[2:])
         try:
-            path = resolve_relative(base, relative, field=f"asset {relative}")
+            path = resolve_relative(base, source_relative, field=f"asset {relative}")
         except UnsafePathError as exc:  # pragma: no cover - validated earlier
             raise LoadError(str(exc)) from exc
         if not path.is_file():

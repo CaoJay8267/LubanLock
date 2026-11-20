@@ -125,6 +125,8 @@ def _parser() -> argparse.ArgumentParser:
     package.add_argument("--sign-key")
     package.add_argument("--sign-cert")
     package.add_argument("--sign-chain", action="append", default=[])
+    package.add_argument("--timestamp-url")
+    package.add_argument("--timestamp-timeout", type=float, default=30.0)
     package.add_argument("--verify", action="store_true")
     package.add_argument("--json", action="store_true")
     package.set_defaults(func=cmd_package)
@@ -134,6 +136,11 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--public-key")
     verify.add_argument("--ca-cert", action="append", default=[])
     verify.add_argument("--crl", action="append", default=[], help="CRL (PEM/DER)")
+    verify.add_argument("--fetch-crl", action="store_true", help="fetch CRL distribution points")
+    verify.add_argument("--ocsp", action="store_true", help="check OCSP")
+    verify.add_argument("--ocsp-url", help="override the certificate OCSP URL")
+    verify.add_argument("--timestamp-cert", help="TSA certificate for RFC 3161")
+    verify.add_argument("--require-timestamp", action="store_true")
     verify.add_argument("--require-signature", action="store_true")
     verify.add_argument("--json", action="store_true")
     verify.set_defaults(func=cmd_verify)
@@ -416,6 +423,8 @@ def cmd_package(args) -> int:
         sign_key=args.sign_key,
         sign_cert=args.sign_cert,
         sign_chain=tuple(args.sign_chain or ()),
+        timestamp_url=args.timestamp_url,
+        timestamp_timeout=args.timestamp_timeout,
     )
     verification = verify_package(package) if args.verify else None
     if args.json:
@@ -446,6 +455,11 @@ def cmd_verify(args) -> int:
         public_key=args.public_key,
         ca_cert=tuple(args.ca_cert or ()),
         crl=tuple(args.crl or ()),
+        fetch_crl=args.fetch_crl,
+        ocsp=args.ocsp,
+        ocsp_url=args.ocsp_url,
+        timestamp_cert=args.timestamp_cert,
+        require_timestamp=args.require_timestamp,
         require_signature=args.require_signature,
     )
     if args.json:

@@ -1,8 +1,8 @@
-"""Minimal MCP client: connect, list tools, import schemas.
+"""MCP client: stdio, HTTP, legacy SSE and WebSocket discovery.
 
-Only stdio and basic HTTP JSON-RPC transports are implemented.  SSE/WebSocket
-servers are reported as unsupported instead of being guessed at.  Commands are
-executed without a shell, with a timeout and output limits.
+Commands are executed without a shell, with timeouts and output limits.  The
+WebSocket transport needs the optional ``websockets`` package; the others use
+only the standard library.
 """
 
 from __future__ import annotations
@@ -15,9 +15,11 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -207,7 +209,6 @@ class _HttpTransport:
     def open(self) -> None:
         if not self.url:
             raise PackageError("http MCP server has no url")
-
     def _post(self, payload: dict) -> list[dict]:
         headers = {
             "Content-Type": "application/json",
@@ -269,6 +270,194 @@ class _HttpTransport:
         return None
 
 
+class _SseTransport:
+    """Legacy MCP HTTP+SSE transport (GET stream, POST messages)."""
+
+    def __init__(self, config: dict, timeout: float):
+        self.url = _expand(str(config.get("url", "")))
+        self.headers = {
+            str(k): _expand(str(v)) for k, v in (config.get("headers") or {}).items()
+        }
+        self.timeout = timeout
+        self.endpoint: str | None = None
+        self._endpoint_ready = threading.Event()
+        self._queue: queue.Queue[dict] = queue.Queue()
+        self._response = None
+        self._thread: threading.Thread | None = None
+        self._counter = 0
+
+    def open(self) -> None:
+        if not self.url:
+            raise PackageError("SSE MCP server has no url")
+        request = urllib.request.Request(
+            self.url,
+            headers={"Accept": "text/event-stream", **self.headers},
+            method="GET",
+        )
+        try:
+            self._response = urllib.request.urlopen(request, timeout=self.timeout)
+        except urllib.error.URLError as exc:
+            raise PackageError(f"cannot reach SSE MCP server {self.url}: {exc.reason}") from exc
+        self._thread = threading.Thread(target=self._read_stream, daemon=True)
+        self._thread.start()
+        if not self._endpoint_ready.wait(self.timeout):
+            raise PackageError("SSE MCP server did not send an endpoint event")
+
+    def _read_stream(self) -> None:
+        if self._response is None:
+            return
+        event = "message"
+        data: list[str] = []
+        try:
+            for raw in self._response:
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                if line.startswith("event:"):
+                    event = line[6:].strip()
+                elif line.startswith("data:"):
+                    data.append(line[5:].lstrip())
+                elif line == "" and data:
+                    payload = "\n".join(data)
+                    data = []
+                    if event == "endpoint":
+                        self.endpoint = urllib.parse.urljoin(self.url, payload)
+                        self._endpoint_ready.set()
+                    else:
+                        for message in _json_messages(payload):
+                            self._queue.put(message)
+                    event = "message"
+        except Exception:  # noqa: BLE001 - stream closes on shutdown
+            return
+
+    def _post(self, payload: dict) -> None:
+        if not self.endpoint:
+            raise PackageError("SSE MCP endpoint is not ready")
+        request = urllib.request.Request(
+            self.endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", **self.headers},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                response.read(MAX_RESPONSE_BYTES)
+        except urllib.error.HTTPError as exc:
+            raise PackageError(f"MCP SSE POST failed with HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise PackageError(f"cannot POST to SSE MCP server: {exc.reason}") from exc
+
+    def request(self, method: str, params: dict | None = None) -> dict:
+        self._counter += 1
+        request_id = self._counter
+        self._post(
+            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}}
+        )
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise PackageError(f"MCP request {method!r} timed out")
+            try:
+                message = self._queue.get(timeout=remaining)
+            except queue.Empty as exc:
+                raise PackageError(f"MCP request {method!r} timed out") from exc
+            if message.get("id") != request_id:
+                continue
+            if "error" in message:
+                error = message["error"]
+                raise PackageError(
+                    f"MCP request {method!r} failed: {error.get('message', error)}"
+                )
+            result = message.get("result")
+            return result if isinstance(result, dict) else {}
+
+    def notify(self, method: str, params: dict | None = None) -> None:
+        try:
+            self._post({"jsonrpc": "2.0", "method": method, "params": params or {}})
+        except PackageError:
+            pass
+
+    def close(self) -> None:
+        if self._response is not None:
+            try:
+                self._response.close()
+            except Exception:  # noqa: BLE001,S110 - best effort
+                pass
+
+
+class _WebSocketTransport:
+    def __init__(self, config: dict, timeout: float):
+        self.url = _expand(str(config.get("url", "")))
+        self.headers = {
+            str(k): _expand(str(v)) for k, v in (config.get("headers") or {}).items()
+        }
+        self.timeout = timeout
+        self.websocket: Any = None
+        self._counter = 0
+
+    def open(self) -> None:
+        if not self.url:
+            raise PackageError("WebSocket MCP server has no url")
+        try:
+            from websockets.sync.client import connect
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise PackageError(
+                "WebSocket MCP support requires the optional 'mcp' extra"
+            ) from exc
+        try:
+            self.websocket = connect(
+                self.url,
+                additional_headers=self.headers,
+                open_timeout=self.timeout,
+                legacy=True,
+            )
+        except Exception as exc:
+            raise PackageError(f"cannot connect WebSocket MCP server: {exc}") from exc
+
+    def _send(self, payload: dict) -> None:
+        if self.websocket is None:
+            raise PackageError("WebSocket MCP transport is not open")
+        self.websocket.send(json.dumps(payload))
+
+    def request(self, method: str, params: dict | None = None) -> dict:
+        self._counter += 1
+        request_id = self._counter
+        self._send(
+            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}}
+        )
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise PackageError(f"MCP request {method!r} timed out")
+            try:
+                raw = self.websocket.recv(timeout=remaining)
+            except Exception as exc:
+                raise PackageError(f"MCP request {method!r} failed: {exc}") from exc
+            for message in _json_messages(raw):
+                if message.get("id") != request_id:
+                    continue
+                if "error" in message:
+                    error = message["error"]
+                    raise PackageError(
+                        f"MCP request {method!r} failed: {error.get('message', error)}"
+                    )
+                result = message.get("result")
+                return result if isinstance(result, dict) else {}
+
+    def notify(self, method: str, params: dict | None = None) -> None:
+        try:
+            self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
+        except PackageError:
+            pass
+
+    def close(self) -> None:
+        if self.websocket is not None:
+            try:
+                self.websocket.close()
+            except Exception:  # noqa: BLE001,S110 - best effort
+                pass
+
+
 def _decode_body(body: bytes, content_type: str) -> list[dict]:
     text = body.decode("utf-8", errors="replace")
     if "text/event-stream" in content_type:
@@ -306,15 +495,21 @@ def discover_server(
     warnings: list[str] = []
     transport_type = config.get("type") or ("stdio" if config.get("command") else "http")
     if transport_type == "stdio":
-        transport: _StdioTransport | _HttpTransport = _StdioTransport(config, timeout)
+        transport: _StdioTransport | _HttpTransport | _SseTransport | _WebSocketTransport = _StdioTransport(config, timeout)
     elif transport_type in {"http", "streamable-http"}:
         transport = _HttpTransport(config, timeout)
+    elif transport_type == "sse":
+        transport = _SseTransport(config, timeout)
+    elif transport_type in {"ws", "websocket"}:
+        transport = _WebSocketTransport(config, timeout)
     else:
         return McpDiscovery(
             server=name,
             transport=str(transport_type),
             tools=(),
-            warnings=(f"unsupported MCP transport {transport_type!r}; use stdio or http",),
+            warnings=(
+                f"unsupported MCP transport {transport_type!r}; use stdio, http, sse or ws",
+            ),
         )
     tools: list[McpToolInfo] = []
     try:

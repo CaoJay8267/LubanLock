@@ -15,6 +15,8 @@ stay reproducible.
 from __future__ import annotations
 
 import base64
+import urllib.error
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -22,18 +24,22 @@ from dotagent.core.errors import PackageError
 from dotagent.core.utils import sha256_bytes
 
 SIGNATURE_NAME = "signature.json"
+TIMESTAMP_NAME = "timestamp.tst"
 SIGNATURE_FORMAT = "dotagent-signature/1"
 ALGORITHM = "ed25519"
+MAX_CRL_BYTES = 8 * 1024 * 1024
+MAX_OCSP_BYTES = 2 * 1024 * 1024
 
 
 def _crypto():
     try:
         from cryptography import x509
-        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import (
             Ed25519PrivateKey,
             Ed25519PublicKey,
         )
+        from cryptography.x509 import ocsp
         from cryptography.x509.oid import NameOID
     except ImportError as exc:  # pragma: no cover - depends on the environment
         raise PackageError(
@@ -46,6 +52,8 @@ def _crypto():
         "Ed25519PrivateKey": Ed25519PrivateKey,
         "Ed25519PublicKey": Ed25519PublicKey,
         "NameOID": NameOID,
+        "hashes": hashes,
+        "ocsp": ocsp,
     }
 
 
@@ -321,6 +329,10 @@ def verify_manifest(
     public_key_path: str | Path | None = None,
     ca_cert_paths: tuple[str | Path, ...] = (),
     crl_paths: tuple[str | Path, ...] = (),
+    fetch_crl: bool = False,
+    ocsp: bool = False,
+    ocsp_url: str | None = None,
+    timeout: float = 10.0,
 ) -> None:
     """Raise :class:`PackageError` when the signature does not verify."""
 
@@ -346,11 +358,20 @@ def verify_manifest(
         anchors: list = []
         for path in ca_cert_paths:
             anchors.extend(_load_certificates(path))
-        _validate_chain(leaf, intermediates, anchors, crl_paths=crl_paths)
+        _validate_chain(
+            leaf,
+            intermediates,
+            anchors,
+            crl_paths=crl_paths,
+            fetch_crl=fetch_crl,
+            ocsp=ocsp,
+            ocsp_url=ocsp_url,
+            timeout=timeout,
+        )
         public_key = leaf.public_key()
     else:
-        if crl_paths:
-            raise PackageError("--crl requires a certificate signature")
+        if crl_paths or fetch_crl or ocsp:
+            raise PackageError("CRL/OCSP checks require a certificate signature")
         if public_key_path is None:
             raise PackageError("signature requires --public-key")
         public_key = serialization.load_pem_public_key(
@@ -402,22 +423,22 @@ def _public_bytes(public_key) -> bytes:
     )
 
 
-def _check_revocations(chain: list, anchors: list, crl_paths) -> None:
-    crypto = _crypto()
-    x509 = crypto["x509"]
+def _check_revocations(
+    chain: list,
+    anchors: list,
+    crl_paths,
+    *,
+    fetch: bool = False,
+    timeout: float = 10.0,
+) -> None:
     now = datetime.now(UTC)
     all_certificates = [*chain, *anchors]
     crls = []
     for path in crl_paths:
         data = Path(path).read_bytes()
-        try:
-            crl = x509.load_pem_x509_crl(data)
-        except ValueError:
-            try:
-                crl = x509.load_der_x509_crl(data)
-            except ValueError as exc:
-                raise PackageError(f"cannot load CRL {path}: {exc}") from exc
-        crls.append(crl)
+        crls.append(_parse_crl(data, str(path)))
+    if fetch:
+        crls.extend(_fetch_crls(chain[0], timeout=timeout))
     leaf = chain[0]
     covered = False
     for crl in crls:
@@ -455,7 +476,130 @@ def _check_revocations(chain: list, anchors: list, crl_paths) -> None:
         raise PackageError("provided CRLs do not cover the signing certificate")
 
 
-def _validate_chain(leaf, intermediates: list, anchors: list, crl_paths=()) -> None:
+def _parse_crl(data: bytes, label: str):
+    crypto = _crypto()
+    x509 = crypto["x509"]
+    try:
+        return x509.load_pem_x509_crl(data)
+    except ValueError:
+        try:
+            return x509.load_der_x509_crl(data)
+        except ValueError as exc:
+            raise PackageError(f"cannot load CRL {label}: {exc}") from exc
+
+
+def _fetch_crls(certificate, *, timeout: float) -> list:
+    crypto = _crypto()
+    x509 = crypto["x509"]
+    try:
+        extension = certificate.extensions.get_extension_for_class(
+            x509.CRLDistributionPoints
+        )
+    except x509.ExtensionNotFound as exc:
+        raise PackageError("certificate has no CRL distribution point") from exc
+    crls = []
+    for point in extension.value:
+        for name in point.full_name or ():
+            url = getattr(name, "value", None)
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                continue
+            try:
+                with urllib.request.urlopen(url, timeout=timeout) as response:
+                    data = response.read(MAX_CRL_BYTES + 1)
+            except urllib.error.URLError as exc:
+                raise PackageError(f"cannot fetch CRL {url}: {exc.reason}") from exc
+            if len(data) > MAX_CRL_BYTES:
+                raise PackageError(f"CRL {url} exceeds the size limit")
+            crls.append(_parse_crl(data, url))
+    if not crls:
+        raise PackageError("certificate CRL distribution points contain no HTTP URL")
+    return crls
+
+
+def _check_ocsp(leaf, chain: list, anchors: list, *, url: str | None, timeout: float) -> None:
+    crypto = _crypto()
+    x509 = crypto["x509"]
+    ocsp = crypto["ocsp"]
+    serialization = crypto["serialization"]
+    issuer = next(
+        (certificate for certificate in [*chain, *anchors] if certificate.subject == leaf.issuer),
+        None,
+    )
+    if issuer is None:
+        raise PackageError("cannot find the OCSP issuer certificate")
+    if not url:
+        try:
+            extension = leaf.extensions.get_extension_for_class(
+                x509.AuthorityInformationAccess
+            )
+        except x509.ExtensionNotFound as exc:
+            raise PackageError("certificate has no OCSP responder URL") from exc
+        for description in extension.value:
+            if description.access_method == x509.AuthorityInformationAccessOID.OCSP:
+                location = description.access_location
+                url = getattr(location, "value", None)
+                break
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        raise PackageError("certificate has no usable OCSP responder URL")
+    request = (
+        ocsp.OCSPRequestBuilder()
+        .add_certificate(leaf, issuer, crypto["hashes"].SHA256())
+        .build()
+    )
+    body = request.public_bytes(serialization.Encoding.DER)
+    http_request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/ocsp-request"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(http_request, timeout=timeout) as response:
+            payload = response.read(MAX_OCSP_BYTES + 1)
+    except urllib.error.URLError as exc:
+        raise PackageError(f"cannot reach OCSP responder {url}: {exc.reason}") from exc
+    if len(payload) > MAX_OCSP_BYTES:
+        raise PackageError("OCSP response exceeds the size limit")
+    try:
+        parsed = ocsp.load_der_ocsp_response(payload)
+    except ValueError as exc:
+        raise PackageError(f"cannot parse OCSP response: {exc}") from exc
+    if parsed.response_status != ocsp.OCSPResponseStatus.SUCCESSFUL:
+        raise PackageError(f"OCSP responder returned {parsed.response_status}")
+    if parsed.serial_number != leaf.serial_number:
+        raise PackageError("OCSP response is for a different certificate")
+    if parsed.certificate_status == ocsp.OCSPCertStatus.REVOKED:
+        raise PackageError("certificate has been revoked (OCSP)")
+    if parsed.certificate_status != ocsp.OCSPCertStatus.GOOD:
+        raise PackageError("OCSP status is unknown")
+    now = datetime.now(UTC)
+    this_update = getattr(parsed, "this_update_utc", None)
+    next_update = getattr(parsed, "next_update_utc", None)
+    if this_update is not None and now < this_update:
+        raise PackageError("OCSP response is not valid yet")
+    if next_update is not None and now > next_update:
+        raise PackageError("OCSP response has expired")
+    responder = next(
+        (cert for cert in parsed.certificates if cert.subject == parsed.responder_name),
+        issuer,
+    )
+    try:
+        responder.public_key().verify(parsed.signature, parsed.tbs_response_bytes)
+    except Exception as exc:
+        raise PackageError("OCSP response signature verification failed") from exc
+
+
+def _validate_chain(
+    leaf,
+    intermediates: list,
+    anchors: list,
+    crl_paths=(),
+    *,
+    fetch_crl: bool = False,
+    ocsp: bool = False,
+    ocsp_url: str | None = None,
+    timeout: float = 10.0,
+) -> None:
     crypto = _crypto()
     x509 = crypto["x509"]
     now = datetime.now(UTC)
@@ -469,8 +613,12 @@ def _validate_chain(leaf, intermediates: list, anchors: list, crl_paths=()) -> N
         assert not_before is not None and not_after is not None
         if not (not_before <= now <= not_after):
             raise PackageError(f"certificate is not valid now (chain index {index})")
-    if crl_paths:
-        _check_revocations(chain, anchors, crl_paths)
+    if crl_paths or fetch_crl:
+        _check_revocations(
+            chain, anchors, crl_paths, fetch=fetch_crl, timeout=timeout
+        )
+    if ocsp:
+        _check_ocsp(leaf, chain, anchors, url=ocsp_url, timeout=timeout)
     if any(
         isinstance(extension.value, x509.BasicConstraints) and extension.value.ca
         for extension in leaf.extensions
@@ -515,6 +663,58 @@ def _check_issued_by(certificate, issuer) -> None:
         public_key.verify(certificate.signature, certificate.tbs_certificate_bytes)
     except Exception as exc:
         raise PackageError("certificate signature verification failed") from exc
+
+
+def request_timestamp(
+    data: bytes, tsa_url: str, *, timeout: float = 30.0
+) -> bytes:
+    """Request an RFC 3161 timestamp token from *tsa_url*."""
+
+    try:
+        import rfc3161ng
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise PackageError(
+            "RFC 3161 timestamps require the optional 'rfc3161ng' dependency"
+        ) from exc
+    try:
+        timestamper = rfc3161ng.RemoteTimestamper(
+            tsa_url,
+            hashname="sha256",
+            timeout=timeout,
+            include_tsa_certificate=True,
+        )
+        token = timestamper.timestamp(data)
+    except Exception as exc:
+        raise PackageError(f"timestamp request failed: {exc}") from exc
+    return token if isinstance(token, bytes) else bytes(token)
+
+
+def verify_timestamp(
+    data: bytes,
+    token: bytes,
+    *,
+    tsa_cert: str | Path | None = None,
+) -> None:
+    """Verify an RFC 3161 token over *data*, optionally against *tsa_cert*."""
+
+    try:
+        import rfc3161ng
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise PackageError(
+            "RFC 3161 timestamps require the optional 'rfc3161ng' dependency"
+        ) from exc
+    certificate: bytes = b""
+    if tsa_cert is not None:
+        certificate = Path(tsa_cert).read_bytes()
+    try:
+        rfc3161ng.check_timestamp(
+            token,
+            certificate=certificate,
+            data=data,
+            hashname="sha256",
+        )
+    except Exception as exc:
+        raise PackageError(f"timestamp verification failed: {exc}") from exc
 
 
 __all__ = [

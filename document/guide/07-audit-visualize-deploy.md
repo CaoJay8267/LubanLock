@@ -50,7 +50,9 @@ budget_warning_ratio: 0.8
 ignore_paths: ['knowledge/private/*']
 ```
 
-- `rules` 可以开关任意 code（包括 `DTA*` 与 `AUD*`），并覆盖 severity；
+- `rules` 可以开关任意 code（包括 `DTA*` 与 `AUD*`），并覆盖 severity、category；
+- `parameters` 传给插件规则，按规则的 `parameter_schema` 校验；
+- 报告按 category 汇总；
 - `secret_patterns` 追加到内置密钥正则；
 - `risky_tool_names` 覆盖默认的命令类工具名；
 - `ignore_paths` 使用 glob 过滤发现项；

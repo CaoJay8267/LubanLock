@@ -9,15 +9,19 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
+from typing import ClassVar
 
 from dotagent.audit.base import AuditFinding
 from dotagent.audit.config import AuditConfig
 from dotagent.core.models import AgentDefinition
+from dotagent.spec.schema import get_schema_store
+from dotagent.spec.schema.validator import validate_instance
 
 
 class AuditRule(ABC):
     code: str = ""
     description: str = ""
+    parameter_schema: ClassVar[dict] = {}
 
     @abstractmethod
     def run(
@@ -68,6 +72,26 @@ def run_custom_rules(
         if not config.enabled(rule.code):
             continue
         try:
+            parameters = config.parameters(rule.code)
+            if rule.parameter_schema:
+                store = get_schema_store()
+                parameter_diagnostics = validate_instance(
+                    parameters,
+                    rule.parameter_schema,
+                    store=store,
+                    base_file=store.path_for("audit.schema.json"),
+                )
+                if any(d.severity.value == "error" for d in parameter_diagnostics):
+                    findings.append(
+                        AuditFinding(
+                            rule.code,
+                            "warning",
+                            "invalid audit rule parameters: "
+                            + "; ".join(d.message for d in parameter_diagnostics),
+                            path=".agents/audit.yaml",
+                        )
+                    )
+                    continue
             findings.extend(rule.run(definition, config))
         except Exception as exc:  # noqa: BLE001 - a broken plugin must not crash audit
             findings.append(

@@ -24,8 +24,11 @@ from dotagent._version import __version__
 from dotagent.build.compiler import CompiledAgent, compute_fingerprint
 from dotagent.build.signing import (
     SIGNATURE_NAME,
+    TIMESTAMP_NAME,
+    request_timestamp,
     sign_manifest,
     verify_manifest,
+    verify_timestamp,
 )
 from dotagent.core.errors import PackageError
 from dotagent.core.utils import pretty_json, sha256_bytes
@@ -75,6 +78,8 @@ def package_agent(
     sign_key: str | Path | None = None,
     sign_cert: str | Path | None = None,
     sign_chain: tuple[str | Path, ...] = (),
+    timestamp_url: str | None = None,
+    timestamp_timeout: float = 30.0,
 ) -> Path:
     """Write *compiled* as a reproducible package and return its path."""
 
@@ -105,7 +110,10 @@ def package_agent(
                 chain_paths=sign_chain,
             )
         ).encode("utf-8")
-
+    if timestamp_url is not None:
+        files[TIMESTAMP_NAME] = request_timestamp(
+            manifest_bytes, timestamp_url, timeout=timestamp_timeout
+        )
     destination = Path(out)
     if fmt == "zip":
         _write_zip(destination, files)
@@ -156,6 +164,12 @@ def verify_package(
     public_key: str | Path | None = None,
     ca_cert: str | Path | tuple[str | Path, ...] | None = None,
     crl: str | Path | tuple[str | Path, ...] | None = None,
+    fetch_crl: bool = False,
+    ocsp: bool = False,
+    ocsp_url: str | None = None,
+    timeout: float = 10.0,
+    timestamp_cert: str | Path | None = None,
+    require_timestamp: bool = False,
     require_signature: bool = False,
 ) -> PackageVerification:
     """Check the structure, checksums, fingerprint and optional signature."""
@@ -170,6 +184,7 @@ def verify_package(
     manifest = _parse_manifest(files.get("manifest.json"), errors)
     agent_document = _parse_agent(files.get("agent.json"), errors)
     signature = _parse_signature(files.get(SIGNATURE_NAME), errors)
+    timestamp = files.get(TIMESTAMP_NAME)
     fingerprint: str | None = None
 
     if manifest is not None:
@@ -211,11 +226,17 @@ def verify_package(
                         public_key_path=public_key,
                         ca_cert_paths=anchors,
                         crl_paths=crls,
+                        fetch_crl=fetch_crl,
+                        ocsp=ocsp,
+                        ocsp_url=ocsp_url,
+                        timeout=timeout,
                     )
                 except (PackageError, KeyError) as exc:
                     errors.append(str(exc))
             elif crls:
                 errors.append("--crl requires --ca-cert")
+            elif ocsp:
+                errors.append("--ocsp requires --ca-cert")
         elif public_key is not None:
             try:
                 verify_manifest(
@@ -241,6 +262,18 @@ def verify_package(
             if manifest is not None and manifest.get("fingerprint") != recomputed:
                 errors.append("manifest fingerprint does not match agent.json")
             _verify_assets(files, assets, errors)
+
+    if require_timestamp and timestamp is None:
+        errors.append("package has no RFC 3161 timestamp")
+    elif timestamp is not None and manifest is not None:
+        try:
+            verify_timestamp(
+                files["manifest.json"],
+                timestamp,
+                tsa_cert=timestamp_cert,
+            )
+        except PackageError as exc:
+            errors.append(str(exc))
 
     return PackageVerification(
         ok=not errors,
@@ -302,7 +335,7 @@ def _verify_entries(
     files: dict[str, bytes], entries: dict, errors: list[str]
 ) -> None:
     actual = {
-        name for name in files if name not in {"manifest.json", SIGNATURE_NAME}
+        name for name in files if name not in {"manifest.json", SIGNATURE_NAME, TIMESTAMP_NAME}
     }
     for name, meta in entries.items():
         if not isinstance(meta, dict):

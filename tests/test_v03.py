@@ -129,6 +129,54 @@ class SharedLibraryTests(unittest.TestCase):
             self.assertIsNotNone(definition.tool("shared"))
             self.assertEqual(definition.uses, (("../library", ">=0.2.0,<0.3.0"),))
 
+    def test_imports_skills_knowledge_and_assets(self):
+        from dotagent.build.lockfile import create_lock
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            library = minimal_project("shared-assets")
+            library["AGENTS.md"] = "# Shared\n"
+            library[".agents/agent.yaml"] = library[".agents/agent.yaml"].replace(
+                "  description: A test agent.\n",
+                "  description: A test agent.\n  version: 0.2.0\n",
+            )
+            library[".agents/skills/cite/SKILL.md"] = (
+                "---\nname: cite\ndescription: Cite sources.\n---\nUse citations.\n"
+            )
+            library[".agents/skills/cite/reference.txt"] = "reference data\n"
+            library[".agents/knowledge/lore.md"] = "---\nname: lore\n---\nShared lore.\n"
+            library.pop(".agents/models/default.yaml", None)
+            write_project(base / "library", library)
+            main = minimal_project("main")
+            main[".agents/agent.yaml"] = main[".agents/agent.yaml"].replace(
+                "spec:\n  model: default",
+                "spec:\n  model: default\n  uses:\n"
+                "    - path: ../library\n      version: '>=0.2.0'",
+            )
+            project = write_project(base / "main", main)
+            result, definition = validate_source(load_source(project))
+            self.assertTrue(result.ok, [d.format() for d in result.diagnostics])
+            self.assertIsNotNone(definition.skill("cite"))
+            self.assertEqual(definition.knowledge[0].metadata.name, "lore")
+            compiled = compile_agent(project)
+            self.assertIsNotNone(
+                compiled.asset("libraries/library/skills/cite/reference.txt")
+            )
+            self.assertIsNotNone(
+                compiled.asset("libraries/library/knowledge/lore.md")
+            )
+            lock = create_lock(compiled)
+            self.assertIn(
+                "libraries/library/skills/cite/reference.txt", lock["sources"]
+            )
+            from dotagent.build.lockfile import check_lock
+
+            self.assertTrue(check_lock(compiled, lock) == [])
+            (base / "library" / ".agents" / "skills" / "cite" / "reference.txt").write_text(
+                "changed\n", encoding="utf-8"
+            )
+            self.assertTrue(any("hash mismatch" in problem for problem in check_lock(compiled, lock)))
+
     def test_version_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
             project = self._projects(Path(directory), ">=0.3.0")
@@ -326,7 +374,6 @@ class CertificateChainTests(unittest.TestCase):
     def test_crl_revocation(self):
         from cryptography import x509
         from cryptography.hazmat.primitives import serialization
-
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             compiled = compile_agent(EXAMPLE)
@@ -369,6 +416,70 @@ class CertificateChainTests(unittest.TestCase):
                     package, ca_cert=root, crl=revoked_path, require_signature=True
                 ).ok
             )
+
+    def test_ocsp_revocation(self):
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.x509 import ocsp
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            compiled = compile_agent(EXAMPLE)
+            key, certificate, root = generate_certificate_chain(base / "keys")
+            package = package_agent(
+                compiled, base / "signed.zip", sign_key=key, sign_cert=certificate
+            )
+            root_cert = x509.load_pem_x509_certificate(Path(root).read_bytes())
+            leaf = x509.load_pem_x509_certificate(Path(certificate).read_bytes())
+            root_key = serialization.load_pem_private_key(
+                (base / "keys" / "root-key.pem").read_bytes(), password=None
+            )
+            now = datetime.now(UTC)
+            response = (
+                ocsp.OCSPResponseBuilder()
+                .add_response(
+                    cert=leaf,
+                    issuer=root_cert,
+                    algorithm=hashes.SHA256(),
+                    cert_status=ocsp.OCSPCertStatus.REVOKED,
+                    this_update=now,
+                    next_update=now + timedelta(days=1),
+                    revocation_time=now,
+                    revocation_reason=x509.ReasonFlags.key_compromise,
+                )
+                .responder_id(ocsp.OCSPResponderEncoding.HASH, root_cert)
+                .sign(root_key, None)
+            )
+            payload = response.public_bytes(serialization.Encoding.DER)
+
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/ocsp-response")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+
+                def log_message(self, *args):
+                    return
+
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                url = f"http://127.0.0.1:{server.server_port}/ocsp"
+                result = verify_package(
+                    package,
+                    ca_cert=root,
+                    ocsp=True,
+                    ocsp_url=url,
+                    require_signature=True,
+                )
+                self.assertFalse(result.ok)
+                self.assertTrue(any("revoked" in error for error in result.errors))
+            finally:
+                server.shutdown()
+                server.server_close()
 
 
 class McpDiscoveryTests(unittest.TestCase):

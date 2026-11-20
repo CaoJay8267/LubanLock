@@ -84,6 +84,7 @@ class RawEntity:
     data: object
     body: str | None = None
     extra_files: tuple[str, ...] = ()
+    source_root: Path | None = None
 
 
 @dataclass
@@ -99,6 +100,7 @@ class AgentSource:
     mcp_rel: str | None = None
     entities: dict[str, tuple[RawEntity, ...]] = field(default_factory=dict)
     files: tuple[str, ...] = ()
+    library_roots: tuple[tuple[str, Path], ...] = ()
     diagnostics: list[Diagnostic] = field(default_factory=list)
 
     @property

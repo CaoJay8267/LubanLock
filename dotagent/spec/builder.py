@@ -144,6 +144,7 @@ def build_agent(
         workflows=workflows,
         tasks=tasks,
         files=tuple(sorted(files)),
+        library_roots=source.library_roots,
     )
     return definition, diagnostics
 
@@ -225,13 +226,18 @@ def _build_knowledge(raw: RawEntity, diagnostics: list[Diagnostic]) -> Knowledge
     if isinstance(explicit, str):
         name = explicit
     else:
-        relative = Path(raw.rel).relative_to("knowledge").with_suffix("")
-        name = slugify("-".join(relative.parts))
+        relative = Path(raw.rel)
+        if relative.parts and relative.parts[0] == "libraries":
+            relative = Path(*relative.parts[3:])
+        if relative.parts and relative.parts[0] == "knowledge":
+            relative = relative.relative_to("knowledge")
+        name = slugify("-".join(relative.with_suffix("").parts))
     return Knowledge(
         metadata=_metadata_from_front_matter(data, name=name),
         content=raw.body or "",
         file=raw.rel,
         priority=str(data.get("priority", "normal")),
+        source_root=raw.source_root,
     )
 
 
@@ -254,6 +260,7 @@ def _build_skill(raw: RawEntity, diagnostics: list[Diagnostic]) -> Skill | None:
         compatibility=data.get("compatibility"),
         metadata=_labels(metadata),
         files=tuple(sorted(raw.extra_files)),
+        source_root=raw.source_root,
     )
 
 

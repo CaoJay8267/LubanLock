@@ -12,6 +12,7 @@ class AuditFinding:
     message: str
     path: str | None = None
     pointer: str = ""
+    category: str | None = None
 
     def to_dict(self) -> dict:
         data = {"code": self.code, "severity": self.severity, "message": self.message}
@@ -19,6 +20,8 @@ class AuditFinding:
             data["path"] = self.path
         if self.pointer:
             data["pointer"] = self.pointer
+        if self.category:
+            data["category"] = self.category
         return data
 
 

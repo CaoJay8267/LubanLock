@@ -28,6 +28,15 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 - **符合开放标准**：技能严格遵循 [Agent Skills](https://agentskills.io/specification)；
   指令使用 [AGENTS.md](https://agents.md/) 开放格式。
 
+## v0.5 新增
+
+- 共享库现在导入工具、模型、技能与知识，并把外部文件纳入锁
+- MCP 增加旧版 SSE 与 WebSocket 传输
+- 证书校验增加 CRL 分发点自动获取、OCSP 与 RFC 3161 时间戳
+- DSH 映射技能、MCP 管理器和子 Agent 插件
+- OpenAI 复杂 schema 使用 `FunctionTool`，子 Agent 生成 `handoffs`
+- 审计规则增加分类与参数 schema
+
 ## v0.4 新增（可选能力）
 
 - 跨 Agent 共享库：`spec.uses` 显式导入另一工程的工具/模型，支持 SemVer 约束
@@ -68,7 +77,7 @@ dotagent --version
 
 ```bash
 python -m pip wheel . --no-deps -w dist
-python -m pip install dist/dotagent-0.4.0-py3-none-any.whl
+python -m pip install dist/dotagent-0.5.0-py3-none-any.whl
 dotagent --version
 ```
 
@@ -213,9 +222,11 @@ spec:
 
 - 路径相对当前工程，版本读取被引用工程的 `metadata.version`；
 - 版本约束支持 `>= <= > < == != ~= ^` 与逗号组合；
-- 只导入 `tools` 与 `models`（无资产，避免跨工程拷贝）；
+- 只导入 `tools`、`models`、`skills` 与 `knowledge`；
+- 技能/知识资产会以 `libraries/<name>/...` 命名空间进入编译产物；
 - 本地或库之间出现重名报 `DTA333`，不静默覆盖；
-- 含共享库的工程禁用增量快速路径，`--locked` 仍通过指纹发现变化。
+- 含共享库的工程禁用增量快速路径，`--locked` 仍通过指纹发现变化；
+- 锁文件会记录外部库文件哈希（`libraries/<name>/...`）。
 
 ### MCP
 
@@ -225,8 +236,10 @@ spec:
 dotagent mcp discover research-agent --write --json
 ```
 
-- 支持 `stdio` 与 `http`；`sse`/`ws` 会明确报告不支持；
-- 读取 `tools/list`，把 `inputSchema` 写成 `.agents/tools/<server>-<tool>.yaml`；
+- 支持 `stdio`、`http`、旧版 `sse` 与 `ws`；
+- HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；
+- WebSocket 需要额外安装 `dotagent[mcp]`；
+- `tools/list` 的 `inputSchema` 写成 `.agents/tools/<server>-<tool>.yaml`；
 - 不执行发现的工具，只做 schema 导入；
 - 结果缓存到 `.agents/.cache/mcp/`，`--refresh` 强制刷新，`--max-age` 控制 TTL；
 - HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；
@@ -281,8 +294,8 @@ spec:
 | `dotagent compile [PATH] [-o DIR] [--check\|--locked\|--incremental]` | 编译、校验产物、锁校验、增量 |
 | `dotagent lock [PATH]` | 写入 `.agents/dotagent.lock`（内容哈希） |
 | `dotagent project [PATH] --target NAME [-o DIR]` | 投影（`--list` 查看目标） |
-| `dotagent package [PATH] [--format zip\|dir] [--sign-key FILE] [--sign-cert CERT] [--verify]` | 可复现打包、可选签名 |
-| `dotagent verify PACKAGE [--public-key FILE] [--ca-cert FILE] [--crl FILE] [--require-signature]` | 校验包、钥匙/证书链/CRL |
+| `dotagent package [PATH] [--format zip\|dir] [--sign-key FILE] [--sign-cert CERT] [--timestamp-url URL] [--verify]` | 可复现打包、签名、时间戳 |
+| `dotagent verify PACKAGE [--public-key FILE] [--ca-cert FILE] [--crl FILE] [--fetch-crl] [--ocsp] [--timestamp-cert FILE]` | 校验包、链、CRL/OCSP/时间戳 |
 | `dotagent keygen [--out DIR] [--chain\|--rotate --root-key K --root-cert C]` | 生成密钥、证书链或轮换证书 |
 | `dotagent test [PATH] [--suite NAME] [-k TEXT] [--update]` | 声明式测试 |
 | `dotagent audit [PATH] [--fail-on error\|warning\|never]` | 静态审计，读 `.agents/audit.yaml` |
@@ -311,10 +324,9 @@ spec:
 | `openai` | OpenAI Agents SDK 脚手架（`agent.py` + `tools.py` + `tools.json`） |
 | `openai-chat` | Chat Completions 请求骨架（model + messages + tools） |
 
-DSH 会映射已知工具名（read/write/edit、glob/grep、bash/pwsh、web_search/web_fetch、
-todo、skill、workflow）到对应 DSH 插件；未知工具、技能、子 Agent、MCP 仍会 warning。
-OpenAI 只为简单标量/字符串数组 schema 生成 handler 脚手架，复杂 schema 保留在
-`tools.json` 并 warning。
+DSH 会映射已知工具名、技能文件系统、MCP manager 与子 Agent 插件；子 Agent 的
+具体指令与工作流/任务仍需手动配置。OpenAI 为简单 schema 生成 `@function_tool`，
+复杂 schema 生成 `FunctionTool`，直接子 Agent 变成 `handoffs`。
 
 ## 编译产物与锁文件
 
@@ -343,7 +355,10 @@ signature.json   # 仅签名时存在
 - `--sign-key private.pem` 对 `manifest.json` 精确字节做 Ed25519 签名。
 - 证书模式：`--sign-key signing-key.pem --sign-cert signing.pem`，签名内携带叶证书与中间链；
   `verify --ca-cert root-ca.pem --require-signature` 验证证书链与签名。
-- `verify --crl revoked.crl` 额外检查吊销列表（PEM/DER）；OCSP 与可信时间戳尚未实现。
+- `verify --crl revoked.crl` 检查吊销列表（PEM/DER）；
+- `verify --fetch-crl` 从证书 CRL 分发点自动获取；
+- `verify --ocsp [--ocsp-url URL]` 检查 OCSP；
+- `package --timestamp-url URL` 获取 RFC 3161 时间戳，`verify --timestamp-cert` 验证。
 - `keygen --chain` 生成 root CA + 叶证书；`keygen --rotate` 在同一个 root 下签发新叶证书，
   实现密钥轮换（旧包和新包都可用同一 trust anchor 验证）。
 - 默认仍无签名，未签名包保持可复现；证书链仅支持 Ed25519。
@@ -373,7 +388,8 @@ ignore_paths: ['knowledge/private/*']
 ```
 
 第三方规则通过 `dotagent.audit_rules` entry point 注册，实现
-`dotagent.audit.AuditRule`（`code` + `run`），即可被同一份 `audit.yaml` 开关与调级。
+`dotagent.audit.AuditRule`（`code` + `run`，可选 `parameter_schema`），即可被同一份
+`audit.yaml` 开关、调级、分类与传参。
 
 `dotagent visualize` 输出：
 

@@ -65,6 +65,7 @@ class Knowledge:
     content: str
     file: str
     priority: str = "normal"
+    source_root: Path | None = field(default=None, compare=False, repr=False)
 
     def to_dict(self) -> dict:
         data = self.metadata.to_dict()
@@ -89,6 +90,7 @@ class Skill:
     compatibility: str | None = None
     metadata: tuple[tuple[str, str], ...] = ()
     files: tuple[str, ...] = ()
+    source_root: Path | None = field(default=None, compare=False, repr=False)
 
     def to_dict(self) -> dict:
         return _drop_empty(
@@ -318,6 +320,9 @@ class AgentDefinition:
     workflows: tuple[Workflow, ...] = ()
     tasks: tuple[Task, ...] = ()
     files: tuple[str, ...] = ()
+    library_roots: tuple[tuple[str, Path], ...] = field(
+        default=(), compare=False, repr=False
+    )
 
     # --- lookups -------------------------------------------------------
     @staticmethod
