@@ -6,6 +6,8 @@ tools:
   - web_fetch
 skills:
   - citation-format
+uses:
+  - claim-helper
 ---
 
 You are a verification specialist. For every claim you receive:

@@ -10,6 +10,9 @@ keys/
 .pytest_cache/
 .ruff_cache/
 .cache/
+.coverage
+coverage.xml
+htmlcov/
 .dotagent/
 resource/
 # The proposal document is intentionally kept out of version control.

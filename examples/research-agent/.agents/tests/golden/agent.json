@@ -7,6 +7,7 @@
     "description": "Plans, researches and summarises questions with cited sources.",
     "files": [
       ".agents/agent.yaml",
+      ".agents/agents/claim-helper.md",
       ".agents/agents/source-checker.md",
       ".agents/knowledge/product-brief.md",
       ".agents/models/default.yaml",
@@ -19,6 +20,7 @@
       ".agents/tools/save_note.yaml",
       ".agents/tools/web_fetch.yaml",
       ".agents/tools/web_search.yaml",
+      ".agents/tools/web_search_quick.yaml",
       ".agents/workflows/quick-research.yaml",
       "AGENTS.md"
     ],
@@ -105,7 +107,21 @@
       }
     },
     "subagents": {
+      "claim-helper": {
+        "description": "Checks one claim against one citation and reports the verdict.",
+        "file": "agents/claim-helper.md",
+        "instructions": "You are a claim checker. Open the cited page, quote the sentence that supports\nor contradicts the claim, and return one of `supported`, `unclear` or\n`contradicted`. Never invent a quote.",
+        "model": "default",
+        "name": "claim-helper",
+        "tools": [
+          "web_fetch"
+        ],
+        "version": "0.1.0"
+      },
       "source-checker": {
+        "agents": [
+          "claim-helper"
+        ],
         "description": "Verifies claims against their cited sources and reports conflicts.",
         "file": "agents/source-checker.md",
         "instructions": "You are a verification specialist. For every claim you receive:\n\n1. Open the cited URL and quote the sentence that supports or contradicts it.\n2. Mark the claim `supported`, `unclear` or `contradicted`.\n3. If a source is unavailable, say so instead of guessing.\n\nReturn a compact table: claim id, verdict, evidence quote, source URL.",
@@ -284,6 +300,73 @@
         },
         "tags": [
           "notes"
+        ],
+        "version": "0.1.0"
+      },
+      "web-search-quick": {
+        "annotations": {
+          "idempotent": true,
+          "open_world": true,
+          "read_only": true
+        },
+        "description": "Search the web with a small default result limit.",
+        "file": "tools/web_search_quick.yaml",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "query": {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "type": "object"
+        },
+        "name": "web-search-quick",
+        "output_schema": {
+          "properties": {
+            "results": {
+              "items": {
+                "properties": {
+                  "snippet": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "results"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "kind": "builtin",
+          "ref": "web_search"
+        },
+        "tags": [
+          "web"
         ],
         "version": "0.1.0"
       },
@@ -513,10 +596,15 @@
       "sha256": "6a1da3e2ab529e03f5e2a13768bc2d631bc4429ff2990c9784271c7b7ecd9392",
       "size": 677
     },
+    "agents/claim-helper.md": {
+      "mediaType": "text/markdown",
+      "sha256": "1919b46e5924d3fb27a3dd34d7e0c697828ca637d58a92b50f6e89595906e561",
+      "size": 327
+    },
     "agents/source-checker.md": {
       "mediaType": "text/markdown",
-      "sha256": "e5c0f8f2263507c55300d08c26b0d058a8b8db7cb9acb34bb4aaf426912f75cd",
-      "size": 508
+      "sha256": "f732078117b8a56ae9da6e3536c151d2ca6d90a42f6e21610cb7ea545e7cb51b",
+      "size": 531
     },
     "knowledge/product-brief.md": {
       "mediaType": "text/markdown",
@@ -544,10 +632,10 @@
       "size": 302
     }
   },
-  "fingerprint": "sha256:fb31c6984812de430b1a90bb57fbd9abd5041768a113d4c8b959a8e4576d982f",
+  "fingerprint": "sha256:83c59b3cfea3d23c61fddaab16acbb8cafbec9cb6e40f84071c5bbc4a40583ee",
   "generator": {
     "name": "dotagent",
-    "version": "0.2.0"
+    "version": "0.3.1"
   },
   "kind": "CompiledAgent"
 }

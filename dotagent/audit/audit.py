@@ -193,10 +193,12 @@ def _from_diagnostic(diagnostic: Diagnostic) -> AuditFinding:
     )
 
 
-def _stats(definition: AgentDefinition) -> dict:
+def _stats(definition: AgentDefinition) -> dict[str, float | int]:
     counts = definition.entity_counts()
     knowledge_chars = sum(len(item.content) for item in definition.knowledge)
-    stats = {key: value for key, value in counts.items() if value}
+    stats: dict[str, float | int] = {
+        key: value for key, value in counts.items() if value
+    }
     stats["knowledge_chars"] = knowledge_chars
     limits = definition.effective_limits()
     stats["knowledge_budget_percent"] = round(
@@ -221,9 +223,9 @@ def _secret_findings(
 ) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
     patterns = list(_SECRET_PATTERNS)
-    for pattern in config.secret_patterns:
+    for raw_pattern in config.secret_patterns:
         try:
-            patterns.append(re.compile(pattern))
+            patterns.append(re.compile(raw_pattern))
         except re.error:
             continue
     texts: list[tuple[str, str]] = []

@@ -416,8 +416,10 @@ def _check_tasks(agent: AgentDefinition, result: ValidationResult) -> None:
                     pointer=example_pointer,
                 )
                 result.extend(
-                    replace(diagnostic, path=diagnostic.path or path)
-                    for diagnostic in diagnostics
+                    [
+                        replace(diagnostic, path=diagnostic.path or path)
+                        for diagnostic in diagnostics
+                    ]
                 )
         if task.output_schema is not None:
             result.extend(

@@ -78,7 +78,7 @@ def import_claude(
     (project_root / AGENTS_FILE).write_text(instructions, encoding="utf-8")
     written.append(project_root / AGENTS_FILE)
 
-    agent_yaml = {
+    agent_yaml: dict = {
         "apiVersion": "dotagent/v1alpha1",
         "kind": "Agent",
         "metadata": {
@@ -315,7 +315,7 @@ def _import_commands(
         description = str(front.get("description") or f"Imported command {name}.")
         tool_names = _tool_names(front.get("allowed-tools"), warnings, str(path))
         tools.update(tool_names)
-        data = {
+        data: dict = {
             "apiVersion": "dotagent/v1alpha1",
             "kind": "Task",
             "metadata": {"name": name, "description": description},
@@ -371,7 +371,7 @@ def import_package(
     )
     written.append(project_root / AGENTS_FILE)
 
-    manifest = {
+    manifest: dict = {
         "apiVersion": "dotagent/v1alpha1",
         "kind": "Agent",
         "metadata": {
@@ -462,7 +462,7 @@ def _write_subagent(spec_dir: Path, item: dict, written: list[Path]) -> None:
 
 
 def _write_tool_from_ir(spec_dir: Path, item: dict, written: list[Path]) -> None:
-    data = {
+    data: dict = {
         "apiVersion": "dotagent/v1alpha1",
         "kind": "Tool",
         "metadata": {
@@ -480,7 +480,7 @@ def _write_tool_from_ir(spec_dir: Path, item: dict, written: list[Path]) -> None
 
 
 def _write_model_from_ir(spec_dir: Path, item: dict, written: list[Path]) -> None:
-    data = {
+    data: dict = {
         "apiVersion": "dotagent/v1alpha1",
         "kind": "Model",
         "metadata": {
@@ -507,7 +507,7 @@ def _write_model_from_ir(spec_dir: Path, item: dict, written: list[Path]) -> Non
 
 
 def _write_workflow_from_ir(spec_dir: Path, item: dict, written: list[Path]) -> None:
-    data = {
+    data: dict = {
         "apiVersion": "dotagent/v1alpha1",
         "kind": "Workflow",
         "metadata": {key: item[key] for key in ("name", "title", "description", "version", "labels", "tags") if item.get(key)},
@@ -524,7 +524,7 @@ def _write_task_from_ir(spec_dir: Path, item: dict, files: dict[str, bytes], wri
     for key in ("input_schema", "output_schema", "skills", "tools", "workflow", "examples"):
         if item.get(key):
             spec[key] = item[key]
-    data = {
+    data: dict = {
         "apiVersion": "dotagent/v1alpha1",
         "kind": "Task",
         "metadata": {

@@ -1,0 +1,11 @@
+apiVersion: dotagent/v1alpha1
+kind: Tool
+extends: web_search
+metadata:
+  name: web-search-quick
+  description: Search the web with a small default result limit.
+spec:
+  annotations:
+    read_only: true
+    idempotent: true
+    open_world: true

@@ -182,9 +182,9 @@ class SchemaTests(unittest.TestCase):
 class LoaderTests(unittest.TestCase):
     def test_loads_the_example(self):
         source = load_source(EXAMPLE)
-        self.assertEqual(len(source.entities["tool"]), 3)
+        self.assertEqual(len(source.entities["tool"]), 4)
         self.assertEqual(len(source.entities["skill"]), 2)
-        self.assertEqual(len(source.entities["subagent"]), 1)
+        self.assertEqual(len(source.entities["subagent"]), 2)
         self.assertEqual(source.instructions[0], "AGENTS.md")
         self.assertEqual(source.diagnostics, [])
 
@@ -427,7 +427,7 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(first.to_json_text(), second.to_json_text())
         self.assertTrue(first.fingerprint.startswith("sha256:"))
         self.assertIn("AGENTS.md", [asset.path for asset in first.assets])
-        self.assertEqual(len(first.assets), 7)
+        self.assertEqual(len(first.assets), 8)
 
     def test_write_and_check(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -16,3 +16,10 @@ checks:
     path: workflows.quick-research.entry
     op: equals
     value: plan
+  - id: has-nested-helper
+    path: subagents.source-checker.agents
+    op: contains
+    value: claim-helper
+  - id: has-quick-search
+    path: tools.web-search-quick
+    op: exists

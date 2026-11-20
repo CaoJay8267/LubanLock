@@ -1,4 +1,4 @@
-# DotAgent 架构与决策记录（v0.3.0）
+# DotAgent 架构与决策记录（v0.3.1）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
 > `dotagent/` 源码与 `tests/` 为准。
@@ -358,9 +358,9 @@ skills: [citation-format]
 
 ## 6. v0.3 验证记录
 
-- 单元测试：`python -m unittest discover -s tests -t tests`（119 个用例，全部通过）；
-- 静态检查：`ruff check dotagent tests scripts` 通过；
-- 示例通过 validate、13 项测试、determinism、package、audit、visualize；
+- 单元测试：`python -m unittest discover -s tests -t tests`（120 个用例，全部通过）；
+- 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过；
+- 示例通过 validate、15 项测试、determinism、package、audit、visualize；
 - 证书链：root 签名验证、旋转后新旧包验证、错误 root 拒绝；
 - MCP：临时 stdio server 的 `initialize`/`tools/list` 与 schema 导入通过；
 - DSH/OpenAI：投影结构、Python 脚手架语法、DSH preset 导入通过；

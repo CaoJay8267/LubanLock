@@ -25,6 +25,9 @@ from dotagent.build.signing import (
 from dotagent.core.errors import DotAgentError, LoadError, UsageError
 from dotagent.core.paths import resolve_agent_layout, resolve_agent_target
 from dotagent.integrations import (
+    DshImportReport,
+    ImportReport,
+    OpenAIImportReport,
     import_claude,
     import_dsh,
     import_openai,
@@ -571,6 +574,7 @@ def cmd_import(args) -> int:
                 f"cannot detect the import format of {source}; use --from "
                 "claude|package|dsh|openai"
             )
+    report: ImportReport | DshImportReport | OpenAIImportReport
     if mode == "claude":
         report = import_claude(
             source,

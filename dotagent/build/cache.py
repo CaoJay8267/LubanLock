@@ -61,7 +61,7 @@ def compute_hashes(
 
     root = Path(project_root)
     cached = cached or {}
-    stats = scan_sources(root, spec_dir)
+    stats = scan_sources(root, Path(spec_dir))
     result: dict[str, dict] = {}
     for relative, stat in stats.items():
         previous = cached.get(relative)

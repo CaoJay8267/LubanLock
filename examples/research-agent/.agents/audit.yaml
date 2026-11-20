@@ -1,0 +1,8 @@
+apiVersion: dotagent/v1alpha1
+kind: AuditConfig
+rules:
+  AUD006:
+    severity: info
+budget_warning_ratio: 0.8
+secret_patterns:
+  - "DOTAGENT_DEV_TOKEN_[A-Za-z0-9]+"

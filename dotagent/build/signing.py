@@ -410,6 +410,7 @@ def _validate_chain(leaf, intermediates: list, anchors: list) -> None:
         if not_before is None:  # pragma: no cover - older cryptography
             not_before = certificate.not_valid_before.replace(tzinfo=UTC)
             not_after = certificate.not_valid_after.replace(tzinfo=UTC)
+        assert not_before is not None and not_after is not None
         if not (not_before <= now <= not_after):
             raise PackageError(f"certificate is not valid now (chain index {index})")
     if any(

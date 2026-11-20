@@ -53,6 +53,30 @@ dotagent --version
 
 要求 Python 3.11+ 与 PyYAML；签名需要可选的 `cryptography`。
 
+## 发布与安装
+
+从源码构建 wheel 并安装：
+
+```bash
+python -m pip wheel . --no-deps -w dist
+python -m pip install dist/dotagent-0.3.1-py3-none-any.whl
+dotagent --version
+```
+
+开发环境：
+
+```bash
+python -m pip install -e ".[signing,dev]"
+ruff check dotagent tests scripts
+mypy dotagent
+python -m unittest discover -s tests -t tests
+coverage run -m unittest discover -s tests -t tests && coverage report
+```
+
+版本策略：SemVer；`.agents/` 规范版本（`dotagent/v1alpha1`）与包版本独立演进。
+变更记录见 [CHANGELOG.md](CHANGELOG.md)。CI 覆盖 Python 3.11–3.14 的
+Ubuntu/Windows 矩阵、覆盖率门禁、类型检查与安装后冒烟测试。
+
 ## 快速开始
 
 ```bash

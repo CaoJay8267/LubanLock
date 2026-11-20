@@ -8,8 +8,10 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import yaml
@@ -25,6 +27,7 @@ from dotagent.build.signing import (
 )
 from dotagent.integrations import (
     discover_agent,
+    discover_server,
     import_dsh,
     import_tools,
     looks_like_dsh,
@@ -263,6 +266,58 @@ for line in sys.stdin:
             result, definition = validate_source(load_source(project))
             self.assertTrue(result.ok, [d.format() for d in result.diagnostics])
             self.assertIsNotNone(definition.tool("fake-echo"))
+
+    def test_http_discovery(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                message = json.loads(self.rfile.read(length))
+                method = message.get("method")
+                if method == "initialize":
+                    result = {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "http", "version": "1"},
+                    }
+                elif method == "tools/list":
+                    result = {
+                        "tools": [
+                            {
+                                "name": "lookup",
+                                "description": "Lookup",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"q": {"type": "string"}},
+                                    "required": ["q"],
+                                },
+                            }
+                        ]
+                    }
+                else:
+                    result = {}
+                payload = json.dumps(
+                    {"jsonrpc": "2.0", "id": message.get("id"), "result": result}
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Mcp-Session-Id", "session-1")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_port}/mcp"
+            report = discover_server("http", {"type": "http", "url": url}, timeout=5)
+            self.assertEqual([tool.name for tool in report.tools], ["lookup"])
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 class ExtraProjectionTests(unittest.TestCase):

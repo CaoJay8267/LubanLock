@@ -7,8 +7,10 @@ Every chain is acyclic and bounded, which keeps resolution decidable.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import replace
+from typing import cast
 
 from dotagent.core.errors import Diagnostic
 from dotagent.spec.loader import RawEntity
@@ -18,7 +20,7 @@ _INHERITABLE_KINDS = ("subagent", "tool", "model", "workflow", "task")
 
 
 def resolve_all_entities(
-    entities: dict[str, list[RawEntity]],
+    entities: Mapping[str, Sequence[RawEntity]],
 ) -> tuple[dict[str, list[RawEntity]], list[Diagnostic]]:
     resolved: dict[str, list[RawEntity]] = {}
     diagnostics: list[Diagnostic] = []
@@ -33,7 +35,7 @@ def resolve_all_entities(
 
 
 def resolve_inheritance(
-    kind: str, raws: list[RawEntity]
+    kind: str, raws: Sequence[RawEntity]
 ) -> tuple[list[RawEntity], list[Diagnostic]]:
     diagnostics: list[Diagnostic] = []
     by_name: dict[str, RawEntity] = {}
@@ -130,7 +132,7 @@ def _merge_documents(
 ) -> dict:
     base_doc = deepcopy(base) if isinstance(base, dict) else {}
     child_doc = deepcopy(child) if isinstance(child, dict) else {}
-    merged = _deep_merge(base_doc, child_doc)
+    merged: dict = cast(dict, _deep_merge(base_doc, child_doc))
     merged.pop("extends", None)
     if kind == "subagent":
         merged["name"] = name

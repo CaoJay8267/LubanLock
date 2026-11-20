@@ -21,8 +21,9 @@ def register(projector: Projector) -> None:
 def _load_external() -> dict[str, Projector]:
     if _EXTERNAL:
         return _EXTERNAL
+    discovered: list = []
     try:
-        discovered = entry_points(group="dotagent.projectors")
+        discovered = list(entry_points(group="dotagent.projectors"))
     except Exception:  # noqa: BLE001  # pragma: no cover - importlib edge cases
         discovered = []
     for entry in discovered:

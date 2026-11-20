@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
+from dotagent._version import __version__
 from dotagent.core.errors import PackageError, Severity
 from dotagent.core.models import AgentDefinition
 from dotagent.core.utils import slugify
@@ -204,7 +205,7 @@ class _HttpTransport:
         if not self.url:
             raise PackageError("http MCP server has no url")
 
-    def _post(self, payload: dict) -> tuple[dict | None, str]:
+    def _post(self, payload: dict) -> list[dict]:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
@@ -226,7 +227,7 @@ class _HttpTransport:
                 body = response.read(MAX_RESPONSE_BYTES + 1)
                 if len(body) > MAX_RESPONSE_BYTES:
                     raise PackageError("MCP response exceeds the size limit")
-                return _decode_body(body, response.headers.get_content_type()), session or ""
+                return _decode_body(body, response.headers.get_content_type())
         except urllib.error.HTTPError as exc:
             raise PackageError(f"MCP HTTP error {exc.code} for {self.url}") from exc
         except urllib.error.URLError as exc:
@@ -235,7 +236,7 @@ class _HttpTransport:
     def request(self, method: str, params: dict | None = None) -> dict:
         self._counter += 1
         request_id = self._counter
-        message, _ = self._post(
+        messages = self._post(
             {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -243,13 +244,17 @@ class _HttpTransport:
                 "params": params or {},
             }
         )
-        if message is None:
-            raise PackageError(f"MCP request {method!r} returned no JSON")
-        if "error" in message:
-            error = message["error"]
-            raise PackageError(f"MCP request {method!r} failed: {error.get('message', error)}")
-        result = message.get("result")
-        return result if isinstance(result, dict) else {}
+        for message in messages:
+            if message.get("id") != request_id:
+                continue
+            if "error" in message:
+                error = message["error"]
+                raise PackageError(
+                    f"MCP request {method!r} failed: {error.get('message', error)}"
+                )
+            result = message.get("result")
+            return result if isinstance(result, dict) else {}
+        raise PackageError(f"MCP request {method!r} returned no matching response")
 
     def notify(self, method: str, params: dict | None = None) -> None:
         try:
@@ -261,27 +266,33 @@ class _HttpTransport:
         return None
 
 
-def _decode_body(body: bytes, content_type: str) -> dict | None:
+def _decode_body(body: bytes, content_type: str) -> list[dict]:
     text = body.decode("utf-8", errors="replace")
     if "text/event-stream" in content_type:
-        for line in text.splitlines():
-            if not line.startswith("data:"):
+        messages: list[dict] = []
+        data_lines: list[str] = []
+        for line in text.splitlines() + [""]:
+            if line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
                 continue
-            payload = line[5:].strip()
-            if not payload:
-                continue
-            try:
-                message = json.loads(payload)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(message, dict):
-                return message
-        return None
+            if line == "" and data_lines:
+                payload = "\n".join(data_lines)
+                data_lines = []
+                messages.extend(_json_messages(payload))
+        return messages
+    return _json_messages(text)
+
+
+def _json_messages(text: str) -> list[dict]:
     try:
         message = json.loads(text)
     except json.JSONDecodeError:
-        return None
-    return message if isinstance(message, dict) else None
+        return []
+    if isinstance(message, dict):
+        return [message]
+    if isinstance(message, list):
+        return [item for item in message if isinstance(item, dict)]
+    return []
 
 
 def discover_server(
@@ -310,7 +321,7 @@ def discover_server(
             {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "dotagent", "version": "0.3.0"},
+                "clientInfo": {"name": "dotagent", "version": __version__},
             },
         )
         transport.notify("notifications/initialized")
@@ -409,7 +420,7 @@ def import_tools(
                 annotations["destructive"] = bool(tool.annotations["destructiveHint"])
             if tool.annotations.get("idempotentHint") is not None:
                 annotations["idempotent"] = bool(tool.annotations["idempotentHint"])
-            document = {
+            document: dict = {
                 "apiVersion": "dotagent/v1alpha1",
                 "kind": "Tool",
                 "metadata": {
