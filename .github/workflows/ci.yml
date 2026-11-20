@@ -24,7 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[signing,dev]"
       - name: Lint
-        run: ruff check dotagent tests scripts
+        run: |
+          ruff --version
+          ruff check dotagent tests scripts --output-format github
       - name: Type check
         run: mypy dotagent
       - name: Unit tests
