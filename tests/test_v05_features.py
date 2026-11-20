@@ -163,19 +163,40 @@ class AuditParameterTests(unittest.TestCase):
             def run(self, definition, config):
                 return [AuditFinding(self.code, "info", "second")]
 
+        class WhenRule(AuditRule):
+            code = "AUD904"
+
+            def run(self, definition, config):
+                return [AuditFinding(self.code, "info", "when")]
+
+        class UnlessRule(AuditRule):
+            code = "AUD905"
+
+            def run(self, definition, config):
+                return [AuditFinding(self.code, "info", "unless")]
+
         register_audit_rule(FirstRule())
         register_audit_rule(SecondRule())
+        register_audit_rule(WhenRule())
+        register_audit_rule(UnlessRule())
         with tempfile.TemporaryDirectory() as directory:
             files = minimal_project()
             files[".agents/audit.yaml"] = (
                 "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
-                "rules:\n  AUD903:\n    depends_on: [AUD902]\n"
+                "rules:\n"
+                "  AUD903:\n    depends_on: [AUD902]\n"
+                "  AUD904:\n    when: [AUD902]\n"
+                "  AUD905:\n    unless: [AUD902]\n"
             )
             project = write_project(Path(directory), files)
             report, _ = audit_agent(project)
             codes = [finding.code for finding in report.findings]
             self.assertIn("AUD902", codes)
             self.assertIn("AUD903", codes)
+            self.assertIn("AUD904", codes)
+            self.assertNotIn("AUD905", codes)
+            self.assertEqual(report.dependencies["AUD903"], ("AUD902",))
+            self.assertIn("graph TD", report.to_markdown())
             (project / ".agents" / "audit.yaml").write_text(
                 "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
                 "rules:\n  AUD902:\n    enabled: false\n"
@@ -252,6 +273,18 @@ class SharedAssetPackageTests(unittest.TestCase):
 
 
 class CertFetchTests(unittest.TestCase):
+    def test_cache_encryption(self):
+        from dotagent.build.signing import _decrypt_cache, _encrypt_cache
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"DOTAGENT_CACHE_DIR": directory}, clear=False
+        ):
+            data = b"private CRL bytes"
+            encrypted = _encrypt_cache(data)
+            self.assertTrue(encrypted.startswith(b"DA1"))
+            self.assertNotIn(data, encrypted)
+            self.assertEqual(_decrypt_cache(encrypted), data)
+
     def test_timestamp_request_and_proxy(self):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 

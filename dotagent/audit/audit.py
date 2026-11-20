@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -42,6 +42,8 @@ class AuditReport:
     findings: tuple[AuditFinding, ...]
     stats: dict
     files: tuple[str, ...] = ()
+    dependencies: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    conditions: dict[str, dict] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -70,6 +72,10 @@ class AuditReport:
             "ok": self.ok,
             "counts": self.counts(),
             "categories": self.categories(),
+            "dependencies": {
+                code: list(items) for code, items in self.dependencies.items()
+            },
+            "conditions": self.conditions,
             "stats": self.stats,
             "findings": [finding.to_dict() for finding in self.findings],
         }
@@ -113,6 +119,12 @@ class AuditReport:
                 f"| {category} | {bucket.get('error', 0)} | "
                 f"{bucket.get('warning', 0)} | {bucket.get('info', 0)} |"
             )
+        if self.dependencies:
+            lines.extend(["", "## 依赖图", "", "```mermaid", "graph TD"])
+            for code, items in sorted(self.dependencies.items()):
+                for dependency in items:
+                    lines.append(f"  {dependency} --> {code}")
+            lines.extend(["```", ""])
         return "\n".join(lines) + "\n"
 
 
@@ -153,6 +165,16 @@ def audit_agent(
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
         findings=tuple(findings),
         stats=stats,
+        dependencies={
+            code: setting.depends_on
+            for code, setting in config.rules.items()
+            if setting.depends_on
+        },
+        conditions={
+            code: {"when": list(setting.when), "unless": list(setting.unless)}
+            for code, setting in config.rules.items()
+            if setting.when or setting.unless
+        },
     )
     directory = Path(out) if out else root / "reports" / "audit"
     directory.mkdir(parents=True, exist_ok=True)

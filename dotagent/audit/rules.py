@@ -105,6 +105,12 @@ def run_custom_rules(
         dependencies = config.depends_on(code)
         if any(dependency not in triggered for dependency in dependencies):
             continue
+        when = config.when(code)
+        if when and not any(code_name in triggered for code_name in when):
+            continue
+        unless = config.unless(code)
+        if unless and any(code_name in triggered for code_name in unless):
+            continue
         try:
             parameters = config.parameters(code)
             if rule.parameter_schema:

@@ -640,6 +640,9 @@ class ExtraProjectionTests(unittest.TestCase):
         names = [plugin["name"] for plugin in plugins]
         self.assertIn("@deepseek-ai/dsh-persona", names)
         self.assertIn("@deepseek-ai/dsh-tool-web", names)
+        preset_ids = [row["config"]["id"] for row in patch[0]["insert"]]
+        self.assertGreaterEqual(len(preset_ids), 3)
+        self.assertIn("research-agent-claim-helper", preset_ids)
 
     def test_openai_agent_scaffold_compiles(self):
         result = project_agent(self.compiled, "openai")

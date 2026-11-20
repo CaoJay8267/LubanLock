@@ -28,6 +28,12 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 - **符合开放标准**：技能严格遵循 [Agent Skills](https://agentskills.io/specification)；
   指令使用 [AGENTS.md](https://agents.md/) 开放格式。
 
+## v0.8 新增
+
+- DSH 子 Agent 生成独立 preset（根 preset + 子 Agent preset）
+- 审计规则 `when`/`unless` 条件与 Mermaid 依赖图
+- PKI 缓存加密（AES-GCM，密钥 `DOTAGENT_CACHE_KEY` 或本地 key 文件）
+
 ## v0.7 新增
 
 - RFC 3161 请求支持显式 `--timestamp-proxy`，不再依赖环境变量
@@ -91,7 +97,7 @@ dotagent --version
 
 ```bash
 python -m pip wheel . --no-deps -w dist
-python -m pip install dist/dotagent-0.7.0-py3-none-any.whl
+python -m pip install dist/dotagent-0.8.0-py3-none-any.whl
 dotagent --version
 ```
 
@@ -339,8 +345,8 @@ spec:
 | `openai-chat` | Chat Completions 请求骨架（model + messages + tools） |
 | `copilot` | GitHub Copilot `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` |
 
-DSH 会映射已知工具名、技能文件系统、MCP manager 与子 Agent 插件；子 Agent 的
-具体指令与工作流/任务仍需手动配置。OpenAI 为简单 schema 生成 `@function_tool`，
+DSH 会映射已知工具名、技能文件系统、MCP manager 与子 Agent；每个直接子 Agent 会生成
+独立 preset，根 preset 仍负责 persona。OpenAI 为简单 schema 生成 `@function_tool`，
 复杂 schema 生成 `FunctionTool`，直接子 Agent 变成 `handoffs`。
 
 ## 编译产物与锁文件

@@ -23,6 +23,18 @@
             "items": { "type": "string", "minLength": 1, "maxLength": 64 },
             "uniqueItems": true,
             "maxItems": 64
+          },
+          "when": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "uniqueItems": true,
+            "maxItems": 64
+          },
+          "unless": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "uniqueItems": true,
+            "maxItems": 64
           }
         }
       }

@@ -4,6 +4,14 @@ All notable changes to DotAgent are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/).
 
+## 0.8.0 — 2026-11-20
+
+### Added
+
+- DSH subagents are emitted as separate agent presets.
+- Audit `when`/`unless` conditions and a Mermaid dependency graph.
+- AES-GCM encryption for PKI cache entries.
+
 ## 0.7.0 — 2026-11-20
 
 ### Added

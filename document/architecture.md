@@ -1,4 +1,4 @@
-# DotAgent 架构与决策记录（v0.7.0）
+# DotAgent 架构与决策记录（v0.8.0）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
 > `dotagent/` 源码与 `tests/` 为准。
@@ -383,6 +383,7 @@ skills: [citation-format]
 - 本地 HTTP 服务提供真实 CRL 分发点测试；
 - 仓库内保存一份真实 TSA token（DigiCert）作为 RFC 3161 验签 fixture；
 - CRL/OCSP 响应缓存到 `~/.cache/dotagent/pki`（`DOTAGENT_CACHE_DIR` 可覆盖），目录 0700/文件 0600；
+- 缓存使用 AES-GCM 加密；密钥来自 `DOTAGENT_CACHE_KEY`（base64）或本地 `key` 文件；
 - `--offline` 只读缓存；`--proxy` 使用 HTTP(S) 代理；超时可配置；
 - RFC 3161 请求支持显式 `--timestamp-proxy`，不依赖环境变量。
 
@@ -395,18 +396,22 @@ skills: [citation-format]
 ### 5.10 审计依赖
 
 `rules.<CODE>.depends_on` 形成依赖图；拓扑排序执行，被依赖规则未触发时跳过。
-循环依赖产生 warning，不阻塞其他规则。
+`when`/`unless` 基于已触发 code 做条件执行；循环依赖产生 warning，不阻塞其他规则。
+报告输出 Mermaid 依赖图。
 
-## 6. v0.7 验证记录
+### 5.11 DSH 子 Agent
 
-- 单元测试：`python -m unittest discover -s tests -t tests`（143 个用例，全部通过）；
+每个直接子 Agent 生成独立 `@deepseek-ai/dsh-agent-preset`，persona 来自子 Agent 指令，
+工具/技能映射到对应 DSH 插件；根 preset 仍负责主 persona。
+
+## 6. v0.8 验证记录
+
+- 单元测试：`python -m unittest discover -s tests -t tests`（144 个用例，全部通过）；
 - 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过（48 个源文件）；
 - 示例通过 validate、15 项测试、determinism、package、audit、visualize；
-- 证书：真实 RFC 3161 token/请求/代理、真实 CRL 分发点、OCSP、离线缓存通过；
-- MCP：stdio/HTTP/旧版 SSE/WebSocket 发现、schema 导入与缓存通过；
-- DSH/OpenAI/Copilot：映射、复杂 schema、handoff、主/路径级 instructions 通过；
-- 共享库：技能/知识/二进制资产、锁文件外部哈希、包导入往返通过；
-- 审计：分类、参数 schema、依赖跳过通过。
+- DSH：根/子 Agent preset、技能/MCP/工具映射通过；
+- 审计：分类、参数、依赖、when/unless、Mermaid 图通过；
+- 证书：真实 RFC 3161 token/请求/代理、CRL DP、OCSP、加密缓存通过。
 
 ## 7. 后续候选（非阻断）
 
@@ -485,10 +490,10 @@ my-host = "my_package:MyHostAdapter"
 - 工作流无条件边/数据映射/重试/循环；这些属于宿主执行语义。
 - 知识按原样注入，无检索/分块/token 精确计数。
 - 投影不清理旧文件；重复投影建议空目录。
-- 证书链支持签名、轮换、CRL、CRL DP、OCSP 与 RFC 3161；离线缓存不加密。
+- 证书链支持签名、轮换、CRL、CRL DP、OCSP 与 RFC 3161；缓存加密，但密钥轮换需手动处理。
 - JSON Schema 子集不含 `unevaluatedProperties`、`$dynamicRef`、`contentEncoding` 等。
-- 审计规则可分类、带参数 schema、依赖图，但没有条件表达式/可视化依赖图。
-- DSH 映射工具/技能/MCP manager/子 Agent 插件；子 Agent 指令与工作流/任务仍需手动配置。
+- 审计规则可分类、带参数 schema、依赖图与 when/unless，但没有任意表达式求值。
+- DSH 映射工具/技能/MCP manager/子 Agent preset；子 Agent model 选择仍需在 DSH 侧确认。
 - OpenAI 复杂 schema 使用 `FunctionTool`，直接子 Agent 生成 `handoffs`；嵌套子 Agent 被扁平化。
 - `openai` 导入只处理字面量 `Agent(...)` 与 `openai-chat.json`，不执行/不推导任意 Python。
 - MCP 支持 stdio/HTTP/旧版 SSE/WebSocket；SSE/WS 的异常恢复与代理支持有限。

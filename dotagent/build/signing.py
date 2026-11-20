@@ -41,6 +41,52 @@ def _cache_root() -> Path:
     return Path.home() / ".cache" / "dotagent" / "pki"
 
 
+def _cache_key() -> bytes:
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError as exc:  # pragma: no cover - depends on environment
+        raise PackageError("encrypted PKI cache requires cryptography") from exc
+    configured = os.environ.get("DOTAGENT_CACHE_KEY")
+    if configured:
+        try:
+            return base64.b64decode(configured, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise PackageError("DOTAGENT_CACHE_KEY is not valid base64") from exc
+    root = _cache_root()
+    key_path = root / "key"
+    if key_path.is_file():
+        return key_path.read_bytes()
+    key = AESGCM.generate_key(bit_length=256)
+    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.chmod(0o700)
+    except OSError:
+        pass
+    key_path.write_bytes(key)
+    try:
+        key_path.chmod(0o600)
+    except OSError:
+        pass
+    return key
+
+
+def _decrypt_cache(payload: bytes) -> bytes:
+    if not payload.startswith(b"DA1"):
+        return payload
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    key = _cache_key()
+    return AESGCM(key).decrypt(payload[3:15], payload[15:], None)
+
+
+def _encrypt_cache(payload: bytes) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    key = _cache_key()
+    nonce = os.urandom(12)
+    return b"DA1" + nonce + AESGCM(key).encrypt(nonce, payload, None)
+
+
 def _cached_bytes(
     url: str,
     *,
@@ -57,10 +103,13 @@ def _cached_bytes(
     path = _cache_root() / f"{kind}-{key}.bin"
     if offline:
         if path.is_file():
-            return path.read_bytes()
+            return _decrypt_cache(path.read_bytes())
         raise PackageError(f"offline cache miss for {url}")
     if path.is_file() and datetime.now(UTC).timestamp() - path.stat().st_mtime <= max_age:
-        return path.read_bytes()
+        try:
+            return _decrypt_cache(path.read_bytes())
+        except Exception:  # noqa: BLE001,S110 - corrupt/old cache is refreshed
+            pass
     request = urllib.request.Request(
         url, data=data, headers=headers or {}, method="POST" if data is not None else "GET"
     )
@@ -80,7 +129,7 @@ def _cached_bytes(
             path.parent.chmod(0o700)
         except OSError:
             pass
-        path.write_bytes(payload)
+        path.write_bytes(_encrypt_cache(payload))
         try:
             path.chmod(0o600)
         except OSError:
