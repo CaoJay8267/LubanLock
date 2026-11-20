@@ -1,9 +1,13 @@
-# DotAgent
+# Luban Lock（鲁班锁）
 
 **声明式、可移植的 Agent 定义与构建工具链。**
 
+> 鲁班锁不靠钉子或胶水：构件靠结构互相咬合，拆开仍是独立零件。
+> Luban Lock 用同样的方式组合 Agent：指令、实体、技能、MCP 与工具各自独立，
+> 通过结构组合成一个可校验、可编译、可移植的整体。
+
 在 `AGENTS.md` + `.agents/` 中定义一次 Agent，然后完成校验、编译、测试、打包、投影、
-审计、可视化与部署。DotAgent 不调用模型、不执行工具、不提供 Agent Loop 或 Harness；
+审计、可视化与部署。Luban Lock 不调用模型、不执行工具、不提供 Agent Loop 或 Harness；
 真正的运行由宿主负责。
 
 ```
@@ -17,7 +21,7 @@ AGENTS.md + .agents/ ──▶ 校验 ──▶ 编译（agent.json + 资产 + �
 
 ## 为什么
 
-Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“定义”与“运行”分开：
+Agent 定义不应该被锁死在某一个宿主的目录里。Luban Lock 把“定义”与“运行”分开：
 
 - **声明式**：YAML 写结构，Markdown 写内容，不需要写 Python 来定义 Agent。
 - **确定性**：排序输出、内容哈希、字节级可复现的包。
@@ -28,11 +32,17 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 - **符合开放标准**：技能严格遵循 [Agent Skills](https://agentskills.io/specification)；
   指令使用 [AGENTS.md](https://agents.md/) 开放格式。
 
+## v1.0 改名
+
+- 因 PyPI `dotagent` 已被占用，项目更名为 **Luban Lock（鲁班锁）**
+- 发行名、导入名与 CLI 统一为 `lubanlock`
+- 格式标识改为 `lubanlock/v1alpha1`、`lubanlock.lock`、`LUBANLOCK_*`
+
 ## v0.8 新增
 
 - DSH 子 Agent 生成独立 preset（根 preset + 子 Agent preset）
 - 审计规则 `when`/`unless` 条件与 Mermaid 依赖图
-- PKI 缓存加密（AES-GCM，密钥 `DOTAGENT_CACHE_KEY` 或本地 key 文件）
+- PKI 缓存加密（AES-GCM，密钥 `LUBANLOCK_CACHE_KEY` 或本地 key 文件）
 
 ## v0.7 新增
 
@@ -61,10 +71,10 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 
 - 跨 Agent 共享库：`spec.uses` 显式导入另一工程的工具/模型，支持 SemVer 约束
 - MCP 发现缓存（`--refresh`/`--max-age`）与 SSE 响应解析
-- 证书吊销列表（CRL）校验：`dotagent verify --crl`
+- 证书吊销列表（CRL）校验：`lubanlock verify --crl`
 - DSH 投影自动映射已知工具插件
 - OpenAI 投影为简单 schema 生成 `tools.py` handler 脚手架
-- 审计规则可插件化（`dotagent.audit_rules` entry point）
+- 审计规则可插件化（`lubanlock.audit_rules` entry point）
 
 ## v0.3 新增
 
@@ -81,12 +91,14 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 python -m venv .venv
 .venv/Scripts/activate        # Windows
 # source .venv/bin/activate   # POSIX
+pip install lubanlock          # 发布后可用
+# 或从源码开发：
 pip install -e .
 
 # 可选：包签名
 pip install -e ".[signing]"
 
-dotagent --version
+lubanlock --version
 ```
 
 要求 Python 3.11+ 与 PyYAML；签名需要可选的 `cryptography`。
@@ -97,34 +109,34 @@ dotagent --version
 
 ```bash
 python -m pip wheel . --no-deps -w dist
-python -m pip install dist/dotagent-0.8.0-py3-none-any.whl
-dotagent --version
+python -m pip install dist/lubanlock-1.0.0-py3-none-any.whl
+lubanlock --version
 ```
 
 开发环境：
 
 ```bash
 python -m pip install -e ".[signing,dev]"
-ruff check dotagent tests scripts
-mypy dotagent
+ruff check lubanlock tests scripts
+mypy lubanlock
 python -m unittest discover -s tests -t tests
 coverage run -m unittest discover -s tests -t tests && coverage report
 ```
 
-版本策略：SemVer；`.agents/` 规范版本（`dotagent/v1alpha1`）与包版本独立演进。
+版本策略：SemVer；`.agents/` 规范版本（`lubanlock/v1alpha1`）与包版本独立演进。
 变更记录见 [CHANGELOG.md](CHANGELOG.md)。CI 覆盖 Python 3.11–3.14 的
 Ubuntu/Windows 矩阵、覆盖率门禁、类型检查与安装后冒烟测试。
 
 ## 快速开始
 
 ```bash
-dotagent init research-agent --template full
-dotagent validate research-agent
-dotagent test research-agent
-dotagent compile research-agent
-dotagent audit research-agent
-dotagent visualize research-agent
-dotagent deploy research-agent
+lubanlock init research-agent --template full
+lubanlock validate research-agent
+lubanlock test research-agent
+lubanlock compile research-agent
+lubanlock audit research-agent
+lubanlock visualize research-agent
+lubanlock deploy research-agent
 ```
 
 默认生成到 `resource/agent/<name>/`：
@@ -142,13 +154,13 @@ resource/agent/research-agent/
 │   ├── audit.yaml           # 审计规则（可选）
 │   ├── tests/
 │   ├── .cache/              # 增量构建缓存（生成）
-│   └── dotagent.lock        # 可选锁文件
+│   └── lubanlock.lock        # 可选锁文件
 ├── build/                   # 编译产物（生成）
 ├── dist/                    # 包与投影（生成）
 └── reports/                 # 审计与可视化（生成）
 ```
 
-`dotagent init --path DIR` 可指定任意目录。旧版 `.agent/` 仍可读取，但会给出弃用警告。
+`lubanlock init --path DIR` 可指定任意目录。旧版 `.agent/` 仍可读取，但会给出弃用警告。
 
 ## Agent Skills 规范
 
@@ -178,11 +190,11 @@ allowed-tools: web_search web_fetch # 可选，空格分隔（标准中为实验
 技能正文（Markdown）。
 ```
 
-`dotagent validate` 会检查名称与目录一致、描述长度、工具引用等；`dotagent skill add`
+`lubanlock validate` 会检查名称与目录一致、描述长度、工具引用等；`lubanlock skill add`
 会直接生成合规骨架。
 
 > 说明：Agent Skills 标准只规定 `SKILL.md` 的结构，不规定 `.agent` 或 `.agents` 目录名。
-> `.agents/` 是当前生态中多个客户端使用的约定；DotAgent 采用它，并保留 `.agent/` 兼容。
+> `.agents/` 是当前生态中多个客户端使用的约定；Luban Lock 采用它，并保留 `.agent/` 兼容。
 > `AGENTS.md` 是独立的开放指令格式，不是 Agent Skills 的一部分。
 
 ## 实体
@@ -207,7 +219,7 @@ allowed-tools: web_search web_fetch # 可选，空格分隔（标准中为实验
 
 ```yaml
 # tools/echo-upper.yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Tool
 extends: echo          # 同种类实体，继承 spec/metadata（名称除外）
 metadata:
@@ -231,7 +243,7 @@ extends: base-reviewer # 也可继承另一个子 Agent 的提示词与配置
 
 ### 跨 Agent 共享库
 
-`spec.uses` 显式导入另一个 DotAgent 工程的 **工具与模型**：
+`spec.uses` 显式导入另一个 Luban Lock 工程的 **工具与模型**：
 
 ```yaml
 spec:
@@ -253,12 +265,12 @@ spec:
 `.agents/mcp.json` 使用标准 `mcpServers` 形状。连接 server 自动发现工具：
 
 ```bash
-dotagent mcp discover research-agent --write --json
+lubanlock mcp discover research-agent --write --json
 ```
 
 - 支持 `stdio`、`http`、旧版 `sse` 与 `ws`；
 - HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；
-- WebSocket 需要额外安装 `dotagent[mcp]`；
+- WebSocket 需要额外安装 `lubanlock[mcp]`；
 - `tools/list` 的 `inputSchema` 写成 `.agents/tools/<server>-<tool>.yaml`；
 - 不执行发现的工具，只做 schema 导入；
 - 结果缓存到 `.agents/.cache/mcp/`，`--refresh` 强制刷新，`--max-age` 控制 TTL；
@@ -268,7 +280,7 @@ dotagent mcp discover research-agent --write --json
 ### 工具声明
 
 ```yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Tool
 metadata:
   name: web_search
@@ -302,31 +314,31 @@ spec:
 }
 ```
 
-`dotagent validate` 会检查 JSON、传输字段、`http://` 安全提示；Claude 投影会生成 `.mcp.json`。
+`lubanlock validate` 会检查 JSON、传输字段、`http://` 安全提示；Claude 投影会生成 `.mcp.json`。
 
 ## CLI
 
 | 命令 | 作用 |
 | --- | --- |
-| `dotagent init [NAME] [--path DIR] [--template minimal\|full]` | 创建 Agent（默认 `resource/agent/<name>`） |
-| `dotagent list` | 列出 `resource/agent` 下的 Agent |
-| `dotagent validate [PATH] [--strict] [--json]` | Schema + 语义校验 |
-| `dotagent compile [PATH] [-o DIR] [--check\|--locked\|--incremental]` | 编译、校验产物、锁校验、增量 |
-| `dotagent lock [PATH]` | 写入 `.agents/dotagent.lock`（内容哈希） |
-| `dotagent project [PATH] --target NAME [-o DIR]` | 投影（`--list` 查看目标） |
-| `dotagent package [PATH] [--format zip\|dir] [--sign-key FILE] [--sign-cert CERT] [--timestamp-url URL] [--verify]` | 可复现打包、签名、时间戳 |
-| `dotagent verify PACKAGE [--public-key FILE] [--ca-cert FILE] [--crl FILE] [--fetch-crl] [--ocsp] [--timestamp-cert FILE]` | 校验包、链、CRL/OCSP/时间戳 |
-| `dotagent keygen [--out DIR] [--chain\|--rotate --root-key K --root-cert C]` | 生成密钥、证书链或轮换证书 |
-| `dotagent test [PATH] [--suite NAME] [-k TEXT] [--update]` | 声明式测试 |
-| `dotagent audit [PATH] [--fail-on error\|warning\|never]` | 静态审计，读 `.agents/audit.yaml` |
-| `dotagent visualize [PATH]` | Mermaid/HTML，写 `reports/visual/` |
-| `dotagent mcp discover [PATH] [--server NAME] [--write] [--refresh] [--max-age SEC]` | 连接 MCP server 导入工具 schema，带缓存 |
-| `dotagent import SOURCE [--from claude\|package\|dsh\|openai\|copilot] [--out DIR]` | 从 Claude Code、DSH、OpenAI、Copilot 或包反向导入 |
-| `dotagent skill add NAME --agent PATH` | 添加合规技能 |
-| `dotagent reset [PATH] --yes [--build]` | 清理生成物并可选重建 |
-| `dotagent deploy [PATH] [--target NAME] [--sign-key FILE]` | 打包 + 投影到 `dist/` |
-| `dotagent inspect [PATH] [--json]` | 摘要或完整 IR |
-| `dotagent schema [NAME] [--check]` | 打印/自检内置 JSON Schema |
+| `lubanlock init [NAME] [--path DIR] [--template minimal\|full]` | 创建 Agent（默认 `resource/agent/<name>`） |
+| `lubanlock list` | 列出 `resource/agent` 下的 Agent |
+| `lubanlock validate [PATH] [--strict] [--json]` | Schema + 语义校验 |
+| `lubanlock compile [PATH] [-o DIR] [--check\|--locked\|--incremental]` | 编译、校验产物、锁校验、增量 |
+| `lubanlock lock [PATH]` | 写入 `.agents/lubanlock.lock`（内容哈希） |
+| `lubanlock project [PATH] --target NAME [-o DIR]` | 投影（`--list` 查看目标） |
+| `lubanlock package [PATH] [--format zip\|dir] [--sign-key FILE] [--sign-cert CERT] [--timestamp-url URL] [--verify]` | 可复现打包、签名、时间戳 |
+| `lubanlock verify PACKAGE [--public-key FILE] [--ca-cert FILE] [--crl FILE] [--fetch-crl] [--ocsp] [--timestamp-cert FILE]` | 校验包、链、CRL/OCSP/时间戳 |
+| `lubanlock keygen [--out DIR] [--chain\|--rotate --root-key K --root-cert C]` | 生成密钥、证书链或轮换证书 |
+| `lubanlock test [PATH] [--suite NAME] [-k TEXT] [--update]` | 声明式测试 |
+| `lubanlock audit [PATH] [--fail-on error\|warning\|never]` | 静态审计，读 `.agents/audit.yaml` |
+| `lubanlock visualize [PATH]` | Mermaid/HTML，写 `reports/visual/` |
+| `lubanlock mcp discover [PATH] [--server NAME] [--write] [--refresh] [--max-age SEC]` | 连接 MCP server 导入工具 schema，带缓存 |
+| `lubanlock import SOURCE [--from claude\|package\|dsh\|openai\|copilot] [--out DIR]` | 从 Claude Code、DSH、OpenAI、Copilot 或包反向导入 |
+| `lubanlock skill add NAME --agent PATH` | 添加合规技能 |
+| `lubanlock reset [PATH] --yes [--build]` | 清理生成物并可选重建 |
+| `lubanlock deploy [PATH] [--target NAME] [--sign-key FILE]` | 打包 + 投影到 `dist/` |
+| `lubanlock inspect [PATH] [--json]` | 摘要或完整 IR |
+| `lubanlock schema [NAME] [--check]` | 打印/自检内置 JSON Schema |
 
 全局 `--resource DIR` 可替换 `resource/` 根目录（默认 `resource`）。路径参数既可以是
 项目路径，也可以是 `resource/agent/` 下的 Agent 名称。
@@ -358,9 +370,9 @@ DSH 会映射已知工具名、技能文件系统、MCP manager 与子 Agent；�
 ```
 
 - `agent.json` 的 SHA-256 指纹覆盖定义与所有资产哈希，跨机器稳定。
-- `dotagent lock` 生成 `.agents/dotagent.lock`，记录每个源文件的 SHA-256。
-- `dotagent compile --locked` 在锁与源码不一致时拒绝构建。
-- `dotagent compile --incremental` 先查 `.agents/.cache/sources.json`：mtime 未变直接复用缓存，
+- `lubanlock lock` 生成 `.agents/lubanlock.lock`，记录每个源文件的 SHA-256。
+- `lubanlock compile --locked` 在锁与源码不一致时拒绝构建。
+- `lubanlock compile --incremental` 先查 `.agents/.cache/sources.json`：mtime 未变直接复用缓存，
   mtime 变了才重新哈希；内容哈希一致就跳过编译。**touch 文件不再导致重建**。
 
 ## 打包与签名
@@ -387,11 +399,11 @@ signature.json   # 仅签名时存在
 
 ## 审计与可视化
 
-`dotagent audit` 组合校验诊断与静态启发式：明文密钥、危险工具注解、明文 HTTP 端点、
+`lubanlock audit` 组合校验诊断与静态启发式：明文密钥、危险工具注解、明文 HTTP 端点、
 MCP 传输缺失、预算接近上限、占位模型等。规则可在 `.agents/audit.yaml` 配置：
 
 ```yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: AuditConfig
 rules:
   AUD001: {enabled: false}
@@ -410,11 +422,11 @@ ignore_paths: ['knowledge/private/*']
 <project>/reports/audit/audit.md
 ```
 
-第三方规则通过 `dotagent.audit_rules` entry point 注册，实现
-`dotagent.audit.AuditRule`（`code` + `run`，可选 `parameter_schema`），即可被同一份
+第三方规则通过 `lubanlock.audit_rules` entry point 注册，实现
+`lubanlock.audit.AuditRule`（`code` + `run`，可选 `parameter_schema`），即可被同一份
 `audit.yaml` 开关、调级、分类与传参。
 
-`dotagent visualize` 输出：
+`lubanlock visualize` 输出：
 
 ```text
 <project>/reports/visual/agent.mmd
@@ -428,10 +440,10 @@ Mermaid 图可在 GitHub/VS Code 直接查看；HTML 版本通过 CDN 加载 Mer
 
 ```bash
 # 从 Claude Code 项目导入：CLAUDE.md、.claude/agents、.claude/skills、.claude/commands、.mcp.json
-dotagent import ./legacy-claude --from claude --out resource/agent/legacy
+lubanlock import ./legacy-claude --from claude --out resource/agent/legacy
 
-# 从 DotAgent 包导入（可编辑工程）
-dotagent import dist/research-agent-0.1.0.zip --from package --out resource/agent/restored
+# 从 Luban Lock 包导入（可编辑工程）
+lubanlock import dist/research-agent-0.1.0.zip --from package --out resource/agent/restored
 ```
 
 导入是刻意有损的：无法映射的字段会以 warning 报告，未知 Claude 工具会生成通用声明，
@@ -440,27 +452,27 @@ dotagent import dist/research-agent-0.1.0.zip --from package --out resource/agen
 ## Python API
 
 ```python
-import dotagent
+import lubanlock
 
-agent = dotagent.load_agent("resource/agent/research-agent")
-compiled = dotagent.compile_agent("resource/agent/research-agent")
-result = dotagent.project_agent(compiled, "claude")
-runtime = dotagent.AgentRuntime(compiled)
+agent = lubanlock.load_agent("resource/agent/research-agent")
+compiled = lubanlock.compile_agent("resource/agent/research-agent")
+result = lubanlock.project_agent(compiled, "claude")
+runtime = lubanlock.AgentRuntime(compiled)
 
 print(compiled.fingerprint)
 print(runtime.system_prompt())
 print(runtime.workflow_plan("quick-research").layers)
 
-report, files = dotagent.audit_agent("resource/agent/research-agent")
+report, files = lubanlock.audit_agent("resource/agent/research-agent")
 ```
 
 插件通过 entry point 注册：
 
 ```toml
-[project.entry-points."dotagent.projectors"]
+[project.entry-points."lubanlock.projectors"]
 my-target = "my_package:MyProjector"
 
-[project.entry-points."dotagent.runtime_adapters"]
+[project.entry-points."lubanlock.runtime_adapters"]
 my-host = "my_package:MyHostAdapter"
 ```
 
@@ -471,15 +483,15 @@ python -m unittest discover -s tests -t tests
 ```
 
 `tests/` 只包含 `test_*.py`；测试所需的通用夹具放在
-`dotagent/testkit/fixtures.py`，供下游项目复用。
+`lubanlock/testkit/fixtures.py`，供下游项目复用。
 
-`dotagent test` 的内置套件：`workflow`、`limits`、`golden`、`determinism`、
+`lubanlock test` 的内置套件：`workflow`、`limits`、`golden`、`determinism`、
 `packaging`、`custom`（`tests/checks.yaml`）。`--update` 只更新 golden 快照。
 
 ## 项目结构
 
 ```text
-dotagent/
+lubanlock/
 ├── __init__.py          # 公共 API
 ├── __main__.py
 ├── cli.py               # 命令行
@@ -505,7 +517,7 @@ dotagent/
 ## 非目标
 
 LLM 推理、Agent Loop、Harness、Sandbox、多租户、长期记忆、工具 Handler、厂商 SDK 绑定。
-DotAgent 只负责“定义与构建”。
+Luban Lock 只负责“定义与构建”。
 
 ## 文档
 

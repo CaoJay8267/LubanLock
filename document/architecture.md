@@ -1,7 +1,7 @@
-# DotAgent 架构与决策记录（v0.8.0）
+# Luban Lock 架构与决策记录（v1.0.0）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
-> `dotagent/` 源码与 `tests/` 为准。
+> `lubanlock/` 源码与 `tests/` 为准。
 
 ## 0. 提案核验（16 项）
 
@@ -22,20 +22,20 @@
 | # | 提案 | 结果 |
 | --- | --- | --- |
 | 1 | 包根目录分类 | `core/ spec/ build/ project/ runtime/ testkit/ audit/ integrations/ templates/`；根目录仅 `__init__.py`、`__main__.py`、`_version.py`、`cli.py`、`py.typed` |
-| 2 | tests 只放 `test_*.py` | 已删除 `tests/__init__.py` 与 `tests/helpers.py`；通用夹具迁至 `dotagent/testkit/fixtures.py` |
+| 2 | tests 只放 `test_*.py` | 已删除 `tests/__init__.py` 与 `tests/helpers.py`；通用夹具迁至 `lubanlock/testkit/fixtures.py` |
 | 3 | 遵循 Agent Skills | 技能严格按标准字段与目录规则；单文件技能移除；名称/目录一致性为错误 |
 | 4 | `document/guide/` | 已创建中文入门指南 |
 | 5 | 示例根目录 `AGENTS.md`、`.agents` | 示例改为 `AGENTS.md` + `.agents/`；`.agent/` 仅兼容 |
 | 6 | `resource/<kind>/<agent-name>/.agents/...` | 采用 `resource/agent/<name>/.agents/`；生成物在项目内 `build/ dist/ reports/` |
-| 7 | 默认生成到 `resource/agent/` | `dotagent init` 默认路径 |
+| 7 | 默认生成到 `resource/agent/` | `lubanlock init` 默认路径 |
 | 8 | `scripts/main.py` | 交互菜单 + 非交互转发：重置编排、加 Skill、审计、可视化、部署 |
-| 9 | 审计/可视化 | `dotagent audit` / `dotagent visualize`，输出到 `reports/` |
+| 9 | 审计/可视化 | `lubanlock audit` / `lubanlock visualize`，输出到 `reports/` |
 | 10 | 子 Agent 在 `.agents/agents/` | 已采用；`subagents/` 为弃用别名 |
 | 11 | 文档中文 | README、架构、guide 均为中文（代码标识符保留英文） |
 | 12 | MCP 声明与导入 | `.agents/mcp.json`、校验、Claude 投影、Claude 导入 |
-| 13 | `dotagent import` | 支持 Claude Code 与 DotAgent 包 |
-| 14 | lockfile 与增量 | `.agents/dotagent.lock`、`--locked`、`--incremental` |
-| 15 | 更多 JSON Schema 关键字 + `--check` | 新增 `patternProperties`、`propertyNames`、`prefixItems`、`contains`、`dependentRequired`、`dependentSchemas`、`if/then/else`；`dotagent schema --check` |
+| 13 | `lubanlock import` | 支持 Claude Code 与 Luban Lock 包 |
+| 14 | lockfile 与增量 | `.agents/lubanlock.lock`、`--locked`、`--incremental` |
+| 15 | 更多 JSON Schema 关键字 + `--check` | 新增 `patternProperties`、`propertyNames`、`prefixItems`、`contains`、`dependentRequired`、`dependentSchemas`、`if/then/else`；`lubanlock schema --check` |
 | 16 | 可选签名 | Ed25519（`cryptography` 可选依赖），默认无签名、可复现 |
 
 ## 1. 设计原则
@@ -102,7 +102,7 @@ AGENTS.md + .agents/
 │   ├── tools/ models/ workflows/ tasks/
 │   ├── mcp.json
 │   ├── tests/
-│   └── dotagent.lock
+│   └── lubanlock.lock
 ├── build/                    # 生成
 ├── dist/                     # 生成
 └── reports/                  # 生成
@@ -127,7 +127,7 @@ AGENTS.md + .agents/
 #### Agent
 
 ```yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Agent
 metadata: {name, title?, description?, version?, labels?, tags?}
 spec:
@@ -208,7 +208,7 @@ skills: [citation-format]
 
 ### 3.5 版本
 
-- 当前 `dotagent/v1alpha1`；未知版本 `DTA107`，错误 kind `DTA111`。
+- 当前 `lubanlock/v1alpha1`；未知版本 `DTA107`，错误 kind `DTA111`。
 - 所有文档 `additionalProperties: false`；未知字段报错。
 
 ## 4. 流水线
@@ -235,9 +235,9 @@ skills: [citation-format]
 
 ```json
 {
-  "apiVersion": "dotagent/v1alpha1",
+  "apiVersion": "lubanlock/v1alpha1",
   "kind": "CompiledAgent",
-  "generator": {"name": "dotagent", "version": "0.2.0"},
+  "generator": {"name": "lubanlock", "version": "0.2.0"},
   "fingerprint": "sha256:...",
   "agent": { "...": "..." },
   "assets": {"AGENTS.md": {"sha256": "...", "size": 0, "mediaType": "text/markdown"}}
@@ -248,7 +248,7 @@ skills: [citation-format]
 
 ### 4.4 锁文件与增量
 
-- `dotagent lock` 写入 `.agents/dotagent.lock`：指纹 + 每个源文件（含技能附件）的
+- `lubanlock lock` 写入 `.agents/lubanlock.lock`：指纹 + 每个源文件（含技能附件）的
   SHA-256/size/mtime；
 - `compile --locked`：锁与当前源码不一致则失败；
 - `compile --incremental`：stat 快路径，命中锁且输出指纹一致时跳过完整编译；
@@ -311,11 +311,11 @@ skills: [citation-format]
 
 ### 5.2 MCP 工具自动发现
 
-- `dotagent mcp discover` 读取 `.agents/mcp.json`，连接 `stdio`、`http`、旧版 `sse`
+- `lubanlock mcp discover` 读取 `.agents/mcp.json`，连接 `stdio`、`http`、旧版 `sse`
   或 `ws` server；
-- WebSocket 依赖可选 `websockets`（`dotagent[mcp]`）；
+- WebSocket 依赖可选 `websockets`（`lubanlock[mcp]`）；
 - 握手：`initialize` → `notifications/initialized` → `tools/list`（支持 cursor 分页）；
-- 工具 `inputSchema` 经 DotAgent schema 子集 lint 后写入 `.agents/tools/<server>-<tool>.yaml`，
+- 工具 `inputSchema` 经 Luban Lock schema 子集 lint 后写入 `.agents/tools/<server>-<tool>.yaml`，
   `source = {kind: mcp, ref: "<server>/<tool>"}`；
 - HTTP 响应支持 JSON 与 `text/event-stream`；旧版 SSE 使用 GET 流 + POST endpoint；
 - 发现结果缓存到 `.agents/.cache/mcp/<server>.json`，`--refresh`/`--max-age` 控制；
@@ -365,7 +365,7 @@ skills: [citation-format]
 - `ignore_paths`（glob）。
 
 配置先经 schema 校验，再应用于审计发现；非法 regex 报 `DTA308`。
-第三方规则通过 `dotagent.audit_rules` entry point 注册，实现 `AuditRule`
+第三方规则通过 `lubanlock.audit_rules` entry point 注册，实现 `AuditRule`
 （`code` + `run` + 可选 `parameter_schema`），与内置规则共享开关、分类与参数校验。
 
 ### 5.7 跨 Agent 共享库
@@ -382,8 +382,8 @@ skills: [citation-format]
 
 - 本地 HTTP 服务提供真实 CRL 分发点测试；
 - 仓库内保存一份真实 TSA token（DigiCert）作为 RFC 3161 验签 fixture；
-- CRL/OCSP 响应缓存到 `~/.cache/dotagent/pki`（`DOTAGENT_CACHE_DIR` 可覆盖），目录 0700/文件 0600；
-- 缓存使用 AES-GCM 加密；密钥来自 `DOTAGENT_CACHE_KEY`（base64）或本地 `key` 文件；
+- CRL/OCSP 响应缓存到 `~/.cache/lubanlock/pki`（`LUBANLOCK_CACHE_DIR` 可覆盖），目录 0700/文件 0600；
+- 缓存使用 AES-GCM 加密；密钥来自 `LUBANLOCK_CACHE_KEY`（base64）或本地 `key` 文件；
 - `--offline` 只读缓存；`--proxy` 使用 HTTP(S) 代理；超时可配置；
 - RFC 3161 请求支持显式 `--timestamp-proxy`，不依赖环境变量。
 
@@ -404,10 +404,10 @@ skills: [citation-format]
 每个直接子 Agent 生成独立 `@deepseek-ai/dsh-agent-preset`，persona 来自子 Agent 指令，
 工具/技能映射到对应 DSH 插件；根 preset 仍负责主 persona。
 
-## 6. v0.8 验证记录
+## 6. v1.0 验证记录
 
 - 单元测试：`python -m unittest discover -s tests -t tests`（144 个用例，全部通过）；
-- 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过（48 个源文件）；
+- 静态检查：`ruff check lubanlock tests scripts` 与 `mypy lubanlock` 通过（48 个源文件）；
 - 示例通过 validate、15 项测试、determinism、package、audit、visualize；
 - DSH：根/子 Agent preset、技能/MCP/工具映射通过；
 - 审计：分类、参数、依赖、when/unless、Mermaid 图通过；
@@ -462,7 +462,7 @@ skills: [citation-format]
 ## 11. 扩展机制
 
 ```python
-from dotagent.project import ProjectedFile, ProjectionResult, Projector
+from lubanlock.project import ProjectedFile, ProjectionResult, Projector
 
 class MyProjector(Projector):
     name = "my-target"
@@ -476,10 +476,10 @@ class MyProjector(Projector):
 ```
 
 ```toml
-[project.entry-points."dotagent.projectors"]
+[project.entry-points."lubanlock.projectors"]
 my-target = "my_package:MyProjector"
 
-[project.entry-points."dotagent.runtime_adapters"]
+[project.entry-points."lubanlock.runtime_adapters"]
 my-host = "my_package:MyHostAdapter"
 ```
 
@@ -503,7 +503,7 @@ my-host = "my_package:MyHostAdapter"
 ## 13. 旧版验证记录（v0.2）
 
 - 单元测试：`python -m unittest discover -s tests -t tests`（v0.2 时 99 个用例）。
-- 静态检查：`ruff check dotagent tests scripts` 通过。
+- 静态检查：`ruff check lubanlock tests scripts` 通过。
 - 示例 `examples/research-agent`：validate、13 项测试、determinism、package、audit、
   visualize 全部通过。
 - 签名：Ed25519 生成、签名、验签、错误密钥/篡改检测通过。

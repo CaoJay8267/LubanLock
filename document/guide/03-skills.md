@@ -1,6 +1,6 @@
 # 编写技能（Agent Skills）
 
-DotAgent 的技能严格遵循 [Agent Skills 规范](https://agentskills.io/specification)。
+Luban Lock 的技能严格遵循 [Agent Skills 规范](https://agentskills.io/specification)。
 
 ## 目录
 
@@ -46,12 +46,12 @@ allowed-tools: web_search web_fetch
 | `metadata` | 否 | string→string 映射 |
 | `allowed-tools` | 否 | 空格分隔的工具名 |
 
-`dotagent validate` 会检查名称与目录一致、描述长度、`allowed-tools` 引用是否存在。
+`lubanlock validate` 会检查名称与目录一致、描述长度、`allowed-tools` 引用是否存在。
 
 ## 快速添加
 
 ```bash
-dotagent skill add citation-format --agent research-agent \
+lubanlock skill add citation-format --agent research-agent \
   --description "把结论渲染成带编号引用的格式。"
 ```
 

@@ -2,7 +2,7 @@
 
 ## resource 约定
 
-DotAgent 默认把所有 Agent 放在：
+Luban Lock 默认把所有 Agent 放在：
 
 ```text
 resource/<kind>/<agent-name>/
@@ -19,9 +19,9 @@ resource/agent/research-agent/
 └── reports/
 ```
 
-- `dotagent init <name>` 默认生成到 `resource/agent/<name>/`；
-- `dotagent list` 列出该目录下的 Agent；
-- `dotagent import` 未指定 `--out` 时也落到这里；
+- `lubanlock init <name>` 默认生成到 `resource/agent/<name>/`；
+- `lubanlock list` 列出该目录下的 Agent；
+- `lubanlock import` 未指定 `--out` 时也落到这里；
 - 审计/可视化/部署产物都在 Agent 项目内，因此位于 `resource/` 下。
 
 `--resource DIR` 可替换整个根目录。
@@ -33,7 +33,7 @@ resource/agent/research-agent/
 | `build/` | 编译产物 | 否 |
 | `dist/` | 包与投影 | 否 |
 | `reports/` | 审计/可视化 | 否 |
-| `.agents/dotagent.lock` | 锁文件（源文件哈希） | 通常提交 |
+| `.agents/lubanlock.lock` | 锁文件（源文件哈希） | 通常提交 |
 | `.agents/tests/golden/` | golden 快照 | 建议提交 |
 
 `.gitignore` 已包含 `build/`、`dist/`、`reports/`、`keys/`。
@@ -43,23 +43,23 @@ resource/agent/research-agent/
 ### 原始 Ed25519 密钥
 
 ```bash
-dotagent keygen --out ./keys
-dotagent package research-agent --sign-key ./keys/private.pem
-dotagent verify dist/research-agent-0.1.0.zip \
+lubanlock keygen --out ./keys
+lubanlock package research-agent --sign-key ./keys/private.pem
+lubanlock verify dist/research-agent-0.1.0.zip \
   --public-key ./keys/public.pem --require-signature
 ```
 
 ### 证书链
 
 ```bash
-dotagent keygen --out ./keys --chain
+lubanlock keygen --out ./keys --chain
 # keys/root-key.pem, root-ca.pem, signing-key.pem, signing.pem
 
-dotagent package research-agent \
+lubanlock package research-agent \
   --sign-key ./keys/signing-key.pem \
   --sign-cert ./keys/signing.pem
 
-dotagent verify dist/research-agent-0.1.0.zip \
+lubanlock verify dist/research-agent-0.1.0.zip \
   --ca-cert ./keys/root-ca.pem --crl ./keys/revoked.crl --require-signature
 ```
 
@@ -69,17 +69,17 @@ dotagent verify dist/research-agent-0.1.0.zip \
 - `--fetch-crl` 从 CRL 分发点自动获取；
 - `--ocsp` 检查 OCSP，`--ocsp-url` 可覆盖证书中的 responder URL；
 - `--timestamp-cert` 验证 RFC 3161 时间戳；获取时间戳用
-  `dotagent package ... --timestamp-url URL`（需要 `dotagent[timestamp]`）；
+  `lubanlock package ... --timestamp-url URL`（需要 `lubanlock[timestamp]`）；
 - `--offline` 只读 PKI 缓存；`--proxy` 为 CRL/OCSP 指定代理；
 - `--timestamp-proxy` 为 RFC 3161 请求指定代理；缓存目录/文件尽力收紧为 0700/0600；
-- PKI 缓存使用 AES-GCM 加密；密钥由 `DOTAGENT_CACHE_KEY`（base64）或本地 `key` 文件提供；
+- PKI 缓存使用 AES-GCM 加密；密钥由 `LUBANLOCK_CACHE_KEY`（base64）或本地 `key` 文件提供；
 - 时间戳会破坏签名包的可复现性；
 - 证书链仅支持 Ed25519。
 
 ### 密钥轮换
 
 ```bash
-dotagent keygen --out ./keys-v2 --rotate \
+lubanlock keygen --out ./keys-v2 --rotate \
   --root-key ./keys/root-key.pem \
   --root-cert ./keys/root-ca.pem
 ```
@@ -94,9 +94,9 @@ dotagent keygen --out ./keys-v2 --rotate \
 ## 锁文件与增量
 
 ```bash
-dotagent lock research-agent
-dotagent compile research-agent --locked
-dotagent compile research-agent --incremental
+lubanlock lock research-agent
+lubanlock compile research-agent --locked
+lubanlock compile research-agent --incremental
 ```
 
 - `--locked`：锁与源码不一致时失败；

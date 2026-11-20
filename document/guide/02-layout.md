@@ -15,13 +15,13 @@
 │   ├── audit.yaml
 │   ├── tests/
 │   ├── .cache/
-│   └── dotagent.lock
+│   └── lubanlock.lock
 ├── build/                    # 编译产物（生成）
 ├── dist/                     # 包与投影（生成）
 └── reports/                  # 审计与可视化（生成）
 ```
 
-`.cache/` 与 `dotagent.lock` 用于增量构建；`audit.yaml` 用于配置审计规则。
+`.cache/` 与 `lubanlock.lock` 用于增量构建；`audit.yaml` 用于配置审计规则。
 
 解析入口可以是项目目录、`.agents/` 或旧的 `.agent/`。
 
@@ -40,7 +40,7 @@
 
 ```yaml
 # .agents/agent.yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Agent
 metadata:
   name: research-agent
@@ -91,5 +91,5 @@ spec:
 resource/agent/<name>/
 ```
 
-`resource/` 是 DotAgent 框架统一管理生成物的位置；其他 `kind` 预留给未来的
+`resource/` 是 Luban Lock 框架统一管理生成物的位置；其他 `kind` 预留给未来的
 模板、数据集等资源。详见 [资源目录与签名](08-resources-and-signing.md)。

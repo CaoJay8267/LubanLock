@@ -1,8 +1,8 @@
-"""DotAgent 用户入口脚本。
+"""LubanLock 用户入口脚本。
 
 用法：
     python scripts/main.py                 # 交互式菜单
-    python scripts/main.py audit NAME      # 非交互，等价于 dotagent audit NAME
+    python scripts/main.py audit NAME      # 非交互，等价于 lubanlock audit NAME
     python scripts/main.py --help
 
 交互菜单提供：重置 Agent 编排、添加 Skill、审计、可视化、部署。
@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from dotagent.cli import main as cli_main
+from lubanlock.cli import main as cli_main
 
 
 def _agents() -> list[str]:
@@ -58,7 +58,7 @@ def _run(argv: list[str]) -> None:
 def _menu() -> None:
     while True:
         print(
-            "\n=== DotAgent 工具菜单 ===\n"
+            "\n=== LubanLock 工具菜单 ===\n"
             "  1. 重置 Agent 编排（清理 build/dist/reports/lock 并重新构建）\n"
             "  2. 添加 Skill\n"
             "  3. 审计\n"
@@ -111,9 +111,9 @@ def main(argv: list[str] | None = None) -> int:
             print("\n已退出")
         return 0
     parser = argparse.ArgumentParser(
-        description="DotAgent 用户脚本（无参数时进入交互菜单）"
+        description="LubanLock 用户脚本（无参数时进入交互菜单）"
     )
-    parser.add_argument("command", nargs="?", help="要转发的 dotagent 子命令")
+    parser.add_argument("command", nargs="?", help="要转发的 lubanlock 子命令")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="子命令参数")
     parsed = parser.parse_args(arguments)
     return cli_main([parsed.command, *parsed.args])

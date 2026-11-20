@@ -1,4 +1,4 @@
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Model
 metadata:
   name: default
@@ -13,10 +13,10 @@ spec:
     - reasoning
   endpoint:
     base_url: https://api.example.com/v1
-    api_key_env: DOTAGENT_API_KEY
+    api_key_env: LUBANLOCK_API_KEY
   parameters:
     temperature: 0.2
   provider_options:
     note: >-
-      TODO: fill in provider-specific options. DotAgent stores this object
+      TODO: fill in provider-specific options. LubanLock stores this object
       verbatim and does not assume any vendor schema.

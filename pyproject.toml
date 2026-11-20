@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dotagent"
-version = "0.8.0"
-description = "Declarative, portable agent definitions built from AGENTS.md + .agents/"
+name = "lubanlock"
+version = "1.0.0"
+description = "Luban Lock: declarative, portable agent definitions built from AGENTS.md + .agents/"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "CaoJay8267" }]
-keywords = ["agent", "dotagent", "declarative", "portable", "skills"]
+keywords = ["agent", "lubanlock", "declarative", "portable", "skills"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -38,40 +38,40 @@ dev = [
 ]
 
 [project.scripts]
-dotagent = "dotagent.cli:main"
+lubanlock = "lubanlock.cli:main"
 
-[project.entry-points."dotagent.projectors"]
+[project.entry-points."lubanlock.projectors"]
 # Third-party projectors register here, e.g.
 # myprojector = "my_package:MyProjector"
 
-[project.entry-points."dotagent.runtime_adapters"]
+[project.entry-points."lubanlock.runtime_adapters"]
 # Third-party runtime adapters register here.
 
-[project.entry-points."dotagent.audit_rules"]
+[project.entry-points."lubanlock.audit_rules"]
 # Third-party audit rules register here, e.g.
 # myrule = "my_package:MyRule"
 
 [tool.setuptools]
 packages = [
-    "dotagent",
-    "dotagent.core",
-    "dotagent.spec",
-    "dotagent.spec.schema",
-    "dotagent.build",
-    "dotagent.project",
-    "dotagent.runtime",
-    "dotagent.testkit",
-    "dotagent.audit",
-    "dotagent.integrations",
-    "dotagent.templates",
+    "lubanlock",
+    "lubanlock.core",
+    "lubanlock.spec",
+    "lubanlock.spec.schema",
+    "lubanlock.build",
+    "lubanlock.project",
+    "lubanlock.runtime",
+    "lubanlock.testkit",
+    "lubanlock.audit",
+    "lubanlock.integrations",
+    "lubanlock.templates",
 ]
 
 [tool.setuptools.package-data]
-dotagent = ["spec/schema/schemas/*.json", "py.typed"]
+lubanlock = ["spec/schema/schemas/*.json", "py.typed"]
 
 [tool.coverage.run]
-source = ["dotagent"]
-omit = ["dotagent/__main__.py"]
+source = ["lubanlock"]
+omit = ["lubanlock/__main__.py"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -80,7 +80,7 @@ skip_covered = true
 
 [tool.mypy]
 python_version = "3.11"
-files = ["dotagent"]
+files = ["lubanlock"]
 check_untyped_defs = true
 ignore_missing_imports = true
 no_implicit_optional = true

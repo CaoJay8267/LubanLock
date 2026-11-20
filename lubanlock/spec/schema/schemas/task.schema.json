@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lubanlock.dev/schemas/v1alpha1/task.schema.json",
+  "title": "LubanLock task declaration (.agent/tasks/<name>.yaml)",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "lubanlock/v1alpha1" },
+    "extends": { "$ref": "common.schema.json#/$defs/name" },
+    "kind": { "const": "Task" },
+    "metadata": { "$ref": "common.schema.json#/$defs/metadata" },
+    "spec": { "$ref": "#/$defs/spec" }
+  },
+  "$defs": {
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prompt": { "$ref": "common.schema.json#/$defs/instructionSourceRef" },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema for the task input; must describe an object when present."
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "Optional JSON Schema for the task result."
+        },
+        "skills": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/name" },
+          "uniqueItems": true,
+          "maxItems": 64
+        },
+        "tools": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/name" },
+          "uniqueItems": true,
+          "maxItems": 64
+        },
+        "workflow": { "$ref": "common.schema.json#/$defs/name" },
+        "examples": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "required": ["input"],
+            "additionalProperties": false,
+            "properties": {
+              "description": { "type": "string", "maxLength": 500 },
+              "input": {},
+              "output": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

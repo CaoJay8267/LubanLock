@@ -1,8 +1,18 @@
 # Changelog
 
-All notable changes to DotAgent are documented here. The format follows
+All notable changes to Luban Lock are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/).
+
+## 1.0.0 — 2026-11-20
+
+### Changed
+
+- Renamed the project to **Luban Lock** to avoid the occupied PyPI name
+  `dotagent`.
+- Distribution, Python import and CLI are now `lubanlock`.
+- Format identifiers moved to `lubanlock/v1alpha1`, `lubanlock.lock` and
+  `LUBANLOCK_*` environment variables.
 
 ## 0.8.0 — 2026-11-20
 
@@ -33,7 +43,7 @@ All notable changes to DotAgent are documented here. The format follows
 ### Changed
 
 - RFC 3161 verification now tries the token's embedded certificate chain.
-- `dotagent import --from` accepts `copilot`.
+- `lubanlock import --from` accepts `copilot`.
 
 ## 0.5.0 — 2026-11-20
 
@@ -41,9 +51,9 @@ All notable changes to DotAgent are documented here. The format follows
 
 - Shared libraries now import skills and knowledge assets under a
   `libraries/<name>/...` namespace; lockfiles include external library files.
-- MCP legacy SSE transport and WebSocket client (`dotagent[mcp]`).
+- MCP legacy SSE transport and WebSocket client (`lubanlock[mcp]`).
 - CRL distribution-point fetching, OCSP checking, and optional RFC 3161
-  timestamps (`dotagent[timestamp]`).
+  timestamps (`lubanlock[timestamp]`).
 - DSH projection maps skills, MCP manager servers, and subagent plugins.
 - OpenAI projection uses `FunctionTool` for complex schemas and emits
   `handoffs` for direct child agents.
@@ -51,7 +61,7 @@ All notable changes to DotAgent are documented here. The format follows
 
 ### Changed
 
-- `dotagent verify` gained `--fetch-crl`, `--ocsp`, `--ocsp-url`,
+- `lubanlock verify` gained `--fetch-crl`, `--ocsp`, `--ocsp-url`,
   `--timestamp-cert` and `--require-timestamp`.
 
 ### Limitations
@@ -69,10 +79,10 @@ Optional capabilities release.
 - Cross-agent shared libraries via `spec.uses` with SemVer constraints;
   tools/models are imported explicitly and duplicate names are rejected.
 - MCP discovery cache (`--refresh`, `--max-age`) and SSE response parsing.
-- CRL verification (`dotagent verify --crl`).
+- CRL verification (`lubanlock verify --crl`).
 - DSH projection maps known tool names to DSH tool plugins.
 - OpenAI projection generates `tools.py` handlers for simple JSON schemas.
-- Pluggable audit rules through the `dotagent.audit_rules` entry point.
+- Pluggable audit rules through the `lubanlock.audit_rules` entry point.
 - Tests for shared libraries, MCP cache/HTTP, CRL revocation, DSH mapping,
   OpenAI handlers and custom audit rules.
 
@@ -95,7 +105,7 @@ Hardening release; no schema changes.
 
 - CI matrix: Python 3.11–3.14 on Ubuntu and Windows, plus a wheel build and
   installed-wheel smoke test.
-- Coverage gate (80% for `dotagent/`) and mypy type checking.
+- Coverage gate (80% for `lubanlock/`) and mypy type checking.
 - MCP HTTP JSON-RPC integration test; SSE response parsing; session header
   handling.
 - `CHANGELOG.md`, development extras and release instructions.
@@ -118,7 +128,7 @@ Hardening release; no schema changes.
 - `extends` inheritance for tools, models, subagents, workflows and tasks,
   with cycle and depth checks.
 - Nested subagents through `agents` / `uses`, cycle and depth validation.
-- MCP stdio/HTTP tool discovery (`dotagent mcp discover`) and schema import.
+- MCP stdio/HTTP tool discovery (`lubanlock mcp discover`) and schema import.
 - Content-hash cache for incremental builds; touching a file without changing
   content no longer rebuilds.
 - Ed25519 X.509 certificate chains and key rotation

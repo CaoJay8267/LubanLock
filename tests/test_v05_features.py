@@ -8,13 +8,13 @@ from unittest.mock import patch
 
 import yaml
 
-from dotagent.build.compiler import compile_agent
-from dotagent.build.packaging import package_agent, verify_package
-from dotagent.build.signing import generate_certificate_chain
-from dotagent.project import project_agent
-from dotagent.spec.loader import load_source
-from dotagent.spec.validator import validate_source
-from dotagent.testkit.fixtures import minimal_project, tool_yaml, write_project
+from lubanlock.build.compiler import compile_agent
+from lubanlock.build.packaging import package_agent, verify_package
+from lubanlock.build.signing import generate_certificate_chain
+from lubanlock.project import project_agent
+from lubanlock.spec.loader import load_source
+from lubanlock.spec.validator import validate_source
+from lubanlock.testkit.fixtures import minimal_project, tool_yaml, write_project
 
 
 class DshMappingTests(unittest.TestCase):
@@ -97,7 +97,7 @@ class OpenAIMappingTests(unittest.TestCase):
 
 class AuditParameterTests(unittest.TestCase):
     def test_categories_and_parameters(self):
-        from dotagent.audit import (
+        from lubanlock.audit import (
             AuditFinding,
             AuditRule,
             audit_agent,
@@ -127,7 +127,7 @@ class AuditParameterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             files = minimal_project()
             files[".agents/audit.yaml"] = (
-                "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
+                "apiVersion: lubanlock/v1alpha1\nkind: AuditConfig\n"
                 "rules:\n  AUD901:\n    parameters:\n      limit: 3\n"
             )
             project = write_project(Path(directory), files)
@@ -135,7 +135,7 @@ class AuditParameterTests(unittest.TestCase):
             self.assertIn("AUD901", [finding.code for finding in report.findings])
             self.assertEqual(report.categories()["custom"]["info"], 1)
             (project / ".agents" / "audit.yaml").write_text(
-                "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
+                "apiVersion: lubanlock/v1alpha1\nkind: AuditConfig\n"
                 "rules:\n  AUD901:\n    parameters:\n      limit: nope\n",
                 encoding="utf-8",
             )
@@ -144,7 +144,7 @@ class AuditParameterTests(unittest.TestCase):
             self.assertIn("invalid audit rule parameters", finding.message)
 
     def test_dependency_skips_rule(self):
-        from dotagent.audit import (
+        from lubanlock.audit import (
             AuditFinding,
             AuditRule,
             audit_agent,
@@ -182,7 +182,7 @@ class AuditParameterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             files = minimal_project()
             files[".agents/audit.yaml"] = (
-                "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
+                "apiVersion: lubanlock/v1alpha1\nkind: AuditConfig\n"
                 "rules:\n"
                 "  AUD903:\n    depends_on: [AUD902]\n"
                 "  AUD904:\n    when: [AUD902]\n"
@@ -198,7 +198,7 @@ class AuditParameterTests(unittest.TestCase):
             self.assertEqual(report.dependencies["AUD903"], ("AUD902",))
             self.assertIn("graph TD", report.to_markdown())
             (project / ".agents" / "audit.yaml").write_text(
-                "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
+                "apiVersion: lubanlock/v1alpha1\nkind: AuditConfig\n"
                 "rules:\n  AUD902:\n    enabled: false\n"
                 "  AUD903:\n    depends_on: [AUD902]\n",
                 encoding="utf-8",
@@ -210,7 +210,7 @@ class AuditParameterTests(unittest.TestCase):
 
 class CopilotTests(unittest.TestCase):
     def test_projection_and_import(self):
-        from dotagent.integrations import import_copilot
+        from lubanlock.integrations import import_copilot
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -237,7 +237,7 @@ class CopilotTests(unittest.TestCase):
 
 class SharedAssetPackageTests(unittest.TestCase):
     def test_library_assets_survive_package_import(self):
-        from dotagent.integrations import import_package
+        from lubanlock.integrations import import_package
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -274,10 +274,10 @@ class SharedAssetPackageTests(unittest.TestCase):
 
 class CertFetchTests(unittest.TestCase):
     def test_cache_encryption(self):
-        from dotagent.build.signing import _decrypt_cache, _encrypt_cache
+        from lubanlock.build.signing import _decrypt_cache, _encrypt_cache
 
         with tempfile.TemporaryDirectory() as directory, patch.dict(
-            "os.environ", {"DOTAGENT_CACHE_DIR": directory}, clear=False
+            "os.environ", {"LUBANLOCK_CACHE_DIR": directory}, clear=False
         ):
             data = b"private CRL bytes"
             encrypted = _encrypt_cache(data)
@@ -291,7 +291,7 @@ class CertFetchTests(unittest.TestCase):
         import rfc3161ng
         from pyasn1.codec.der import decoder, encoder
 
-        from dotagent.build.signing import request_timestamp, verify_timestamp
+        from lubanlock.build.signing import request_timestamp, verify_timestamp
 
         token = (Path(__file__).parent / "fixtures" / "digicert.tsr").read_bytes()
         tst, _ = decoder.decode(token, asn1Spec=rfc3161ng.TimeStampToken())
@@ -428,8 +428,8 @@ class CertFetchTests(unittest.TestCase):
             server.server_close()
 
     def test_real_rfc3161_token(self):
-        from dotagent.build.signing import verify_timestamp
-        from dotagent.core.errors import PackageError
+        from lubanlock.build.signing import verify_timestamp
+        from lubanlock.core.errors import PackageError
 
         token = (Path(__file__).parent / "fixtures" / "digicert.tsr").read_bytes()
         verify_timestamp(b"dotagent timestamp fixture", token)
@@ -461,7 +461,7 @@ class CertFetchTests(unittest.TestCase):
                 .next_update(now + timedelta(days=1))
                 .sign(root_key, None)
             )
-            with patch("dotagent.build.signing._fetch_crls", return_value=[crl]):
+            with patch("lubanlock.build.signing._fetch_crls", return_value=[crl]):
                 result = verify_package(
                     package, ca_cert=root, fetch_crl=True, require_signature=True
                 )
@@ -478,7 +478,7 @@ class CertFetchTests(unittest.TestCase):
             )
             key, certificate, root = generate_certificate_chain(base / "keys")
             with patch(
-                "dotagent.build.packaging.request_timestamp", return_value=b"token"
+                "lubanlock.build.packaging.request_timestamp", return_value=b"token"
             ):
                 package = package_agent(
                     compiled,
@@ -502,7 +502,7 @@ class CertFetchTests(unittest.TestCase):
                 .sign(root_key, None)
             )
             with patch(
-                "dotagent.build.signing._fetch_crls", return_value=[crl]
+                "lubanlock.build.signing._fetch_crls", return_value=[crl]
             ):
                 result = verify_package(
                     package,
@@ -521,8 +521,8 @@ class CertFetchTests(unittest.TestCase):
             )
             key, certificate, _root = generate_certificate_chain(base / "keys")
             with patch(
-                "dotagent.build.packaging.request_timestamp", return_value=b"token"
-            ), patch("dotagent.build.packaging.verify_timestamp") as verify:
+                "lubanlock.build.packaging.request_timestamp", return_value=b"token"
+            ), patch("lubanlock.build.packaging.verify_timestamp") as verify:
                 package = package_agent(
                     compiled,
                     base / "signed.zip",

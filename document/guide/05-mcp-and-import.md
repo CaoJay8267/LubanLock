@@ -22,7 +22,7 @@
 }
 ```
 
-DotAgent 会：
+Luban Lock 会：
 
 - 校验 JSON 与服务对象形状；
 - 检查 `type` 枚举、`url` 形状、`command`/`url` 至少一个；
@@ -30,20 +30,20 @@ DotAgent 会：
 - 在 Claude 投影中生成 `.mcp.json`；
 - 在导入 Claude 项目时复制 `.mcp.json`。
 
-> 环境变量不会在 DotAgent 中展开或求值；框架只保存声明。
+> 环境变量不会在 Luban Lock 中展开或求值；框架只保存声明。
 
 ## 自动发现工具
 
-连接 server 读取 `tools/list`，并把 schema 写成 DotAgent 工具声明：
+连接 server 读取 `tools/list`，并把 schema 写成 Luban Lock 工具声明：
 
 ```bash
-dotagent mcp discover research-agent --write
-dotagent mcp discover research-agent --server docs --write --json
+lubanlock mcp discover research-agent --write
+lubanlock mcp discover research-agent --server docs --write --json
 ```
 
 - 支持 `stdio`、`http`、旧版 `sse` 与 `ws`；
 - HTTP 响应支持 JSON 与 `text/event-stream`（SSE）；旧版 SSE 使用 GET 流 + POST endpoint；
-- WebSocket 需要 `dotagent[mcp]`；
+- WebSocket 需要 `lubanlock[mcp]`；
 - 生成 `.agents/tools/<server>-<tool>.yaml`，`source.ref = "<server>/<tool>"`；
 - 不执行发现的工具，只导入 schema；
 - 结果缓存在 `.agents/.cache/mcp/`；`--refresh` 强制刷新，`--max-age` 设置 TTL；
@@ -66,12 +66,12 @@ spec:
 ## 导入 Claude Code
 
 ```bash
-dotagent import ./legacy-claude --from claude --out resource/agent/legacy
+lubanlock import ./legacy-claude --from claude --out resource/agent/legacy
 ```
 
 映射关系：
 
-| Claude | DotAgent |
+| Claude | Luban Lock |
 | --- | --- |
 | `CLAUDE.md` | `AGENTS.md` |
 | `.claude/agents/*.md` | `.agents/agents/*.md` |
@@ -86,20 +86,20 @@ dotagent import ./legacy-claude --from claude --out resource/agent/legacy
 - 权限模式、hooks 等 Claude 专属字段不会迁移；
 - 未知工具会生成最小 schema，需要人工补全；
 - 命令参数 `$ARGUMENTS` 保留为文本；
-- 名称会规范化为 DotAgent slug（小写、连字符）。
+- 名称会规范化为 Luban Lock slug（小写、连字符）。
 
 导入后建议执行：
 
 ```bash
-dotagent validate legacy
-dotagent audit legacy
-dotagent test legacy --update
+lubanlock validate legacy
+lubanlock audit legacy
+lubanlock test legacy --update
 ```
 
 ## 导入包
 
 ```bash
-dotagent import dist/research-agent-0.1.0.zip --from package --out resource/agent/restored
+lubanlock import dist/research-agent-0.1.0.zip --from package --out resource/agent/restored
 ```
 
 从 `agent.json` 与资产重建可编辑工程；适合“包 → 源码”的闭环，但格式与指纹可能与原工程不同。
@@ -108,13 +108,13 @@ dotagent import dist/research-agent-0.1.0.zip --from package --out resource/agen
 
 ```bash
 # DSH：旧版 preset.yml + agent.cordis.yml，或新版 cordis.patch.yml
-dotagent import ./my-dsh-preset --from dsh
+lubanlock import ./my-dsh-preset --from dsh
 
 # OpenAI：openai-chat.json，或生成的 agent.py + tools.json（AST 解析，不执行代码）
-dotagent import ./openai --from openai
+lubanlock import ./openai --from openai
 
 # Copilot：.github/copilot-instructions.md 与 .github/instructions/*.instructions.md
-dotagent import ./repo --from copilot
+lubanlock import ./repo --from copilot
 ```
 
 ## 自动识别

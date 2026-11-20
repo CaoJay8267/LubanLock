@@ -9,19 +9,19 @@ from pathlib import Path
 
 import yaml
 
-from dotagent.build.compiler import compile_agent
-from dotagent.build.packaging import package_agent, verify_package
-from dotagent.build.signing import generate_keypair
-from dotagent.core.errors import PackageError, ProjectionError, Severity
-from dotagent.project import (
+from lubanlock.build.compiler import compile_agent
+from lubanlock.build.packaging import package_agent, verify_package
+from lubanlock.build.signing import generate_keypair
+from lubanlock.core.errors import PackageError, ProjectionError, Severity
+from lubanlock.project import (
     ProjectedFile,
     ProjectionResult,
     get_projector,
     list_projectors,
     project_agent,
 )
-from dotagent.runtime import AgentRuntime, adapt, get_adapter, list_adapters
-from dotagent.testkit.fixtures import minimal_project, write_project
+from lubanlock.runtime import AgentRuntime, adapt, get_adapter, list_adapters
+from lubanlock.testkit.fixtures import minimal_project, write_project
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "research-agent"

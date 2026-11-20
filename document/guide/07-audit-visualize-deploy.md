@@ -3,7 +3,7 @@
 ## 审计
 
 ```bash
-dotagent audit research-agent
+lubanlock audit research-agent
 ```
 
 审计不联网、不执行工具，结果写入：
@@ -27,9 +27,9 @@ dotagent audit research-agent
 ### 失败阈值
 
 ```bash
-dotagent audit research-agent --fail-on error     # 默认：有 error 才失败
-dotagent audit research-agent --fail-on warning   # warning 也失败
-dotagent audit research-agent --fail-on never     # 总是返回 0
+lubanlock audit research-agent --fail-on error     # 默认：有 error 才失败
+lubanlock audit research-agent --fail-on warning   # warning 也失败
+lubanlock audit research-agent --fail-on never     # 总是返回 0
 ```
 
 > 审计是启发式，不能替代专业 secret 扫描或权限评审。
@@ -39,7 +39,7 @@ dotagent audit research-agent --fail-on never     # 总是返回 0
 `.agents/audit.yaml`：
 
 ```yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: AuditConfig
 rules:
   AUD001: {enabled: false}
@@ -60,10 +60,10 @@ ignore_paths: ['knowledge/private/*']
 - `ignore_paths` 使用 glob 过滤发现项；
 - 配置本身先做 schema 校验，非法 regex 会报 `DTA308`。
 
-第三方规则通过 `dotagent.audit_rules` entry point 注册：
+第三方规则通过 `lubanlock.audit_rules` entry point 注册：
 
 ```python
-from dotagent.audit import AuditFinding, AuditRule
+from lubanlock.audit import AuditFinding, AuditRule
 
 
 class MyRule(AuditRule):
@@ -78,7 +78,7 @@ class MyRule(AuditRule):
 ## 可视化
 
 ```bash
-dotagent visualize research-agent
+lubanlock visualize research-agent
 ```
 
 输出：
@@ -97,7 +97,7 @@ dotagent visualize research-agent
 ## 部署
 
 ```bash
-dotagent deploy research-agent
+lubanlock deploy research-agent
 ```
 
 等价于：
@@ -109,7 +109,7 @@ dotagent deploy research-agent
 带签名：
 
 ```bash
-dotagent deploy research-agent --sign-key ./keys/private.pem
+lubanlock deploy research-agent --sign-key ./keys/private.pem
 ```
 
 ## 用户脚本（scripts/main.py）

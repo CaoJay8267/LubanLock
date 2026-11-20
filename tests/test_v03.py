@@ -17,26 +17,26 @@ from pathlib import Path
 
 import yaml
 
-from dotagent.audit import audit_agent
-from dotagent.build.cache import incremental_status, refresh_cache
-from dotagent.build.compiler import compile_agent, write_compiled
-from dotagent.build.lockfile import read_lock, write_lock
-from dotagent.build.packaging import package_agent, verify_package
-from dotagent.build.signing import (
+from lubanlock.audit import audit_agent
+from lubanlock.build.cache import incremental_status, refresh_cache
+from lubanlock.build.compiler import compile_agent, write_compiled
+from lubanlock.build.lockfile import read_lock, write_lock
+from lubanlock.build.packaging import package_agent, verify_package
+from lubanlock.build.signing import (
     generate_certificate_chain,
     rotate_signing_certificate,
 )
-from dotagent.integrations import (
+from lubanlock.integrations import (
     discover_agent,
     discover_server,
     import_dsh,
     import_tools,
     looks_like_dsh,
 )
-from dotagent.project import project_agent
-from dotagent.spec.loader import load_source
-from dotagent.spec.validator import validate_source
-from dotagent.testkit.fixtures import minimal_project, tool_yaml, write_project
+from lubanlock.project import project_agent
+from lubanlock.spec.loader import load_source
+from lubanlock.spec.validator import validate_source
+from lubanlock.testkit.fixtures import minimal_project, tool_yaml, write_project
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "research-agent"
@@ -130,7 +130,7 @@ class SharedLibraryTests(unittest.TestCase):
             self.assertEqual(definition.uses, (("../library", ">=0.2.0,<0.3.0"),))
 
     def test_imports_skills_knowledge_and_assets(self):
-        from dotagent.build.lockfile import create_lock
+        from lubanlock.build.lockfile import create_lock
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -169,7 +169,7 @@ class SharedLibraryTests(unittest.TestCase):
             self.assertIn(
                 "libraries/library/skills/cite/reference.txt", lock["sources"]
             )
-            from dotagent.build.lockfile import check_lock
+            from lubanlock.build.lockfile import check_lock
 
             self.assertTrue(check_lock(compiled, lock) == [])
             (base / "library" / ".agents" / "skills" / "cite" / "reference.txt").write_text(
@@ -195,7 +195,7 @@ class SharedLibraryTests(unittest.TestCase):
             self.assertIn("DTA333", _codes(result.diagnostics))
 
     def test_incremental_disabled_with_libraries(self):
-        from dotagent.build.cache import incremental_status
+        from lubanlock.build.cache import incremental_status
 
         with tempfile.TemporaryDirectory() as directory:
             project = self._projects(Path(directory))
@@ -203,7 +203,7 @@ class SharedLibraryTests(unittest.TestCase):
             out = Path(directory) / "build"
             write_compiled(compiled, out)
             write_lock(compiled)
-            lock = read_lock(project / ".agents" / "dotagent.lock")
+            lock = read_lock(project / ".agents" / "lubanlock.lock")
             self.assertIsNone(
                 incremental_status(project, project / ".agents", lock, out / "agent.json")
             )
@@ -240,7 +240,7 @@ class NestedAgentTests(unittest.TestCase):
 
 class AuditConfigTests(unittest.TestCase):
     def test_custom_rule_and_disable(self):
-        from dotagent.audit import (
+        from lubanlock.audit import (
             AuditFinding,
             AuditRule,
             audit_agent,
@@ -264,14 +264,14 @@ class AuditConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             files = minimal_project()
             files[".agents/audit.yaml"] = (
-                "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n"
+                "apiVersion: lubanlock/v1alpha1\nkind: AuditConfig\n"
                 "rules:\n  AUD900:\n    enabled: false\n"
             )
             project = write_project(Path(directory) / "agent", files)
             report, _ = audit_agent(project)
             self.assertNotIn("AUD900", [finding.code for finding in report.findings])
             (project / ".agents" / "audit.yaml").write_text(
-                "apiVersion: dotagent/v1alpha1\nkind: AuditConfig\n",
+                "apiVersion: lubanlock/v1alpha1\nkind: AuditConfig\n",
                 encoding="utf-8",
             )
             report, _ = audit_agent(project)
@@ -284,7 +284,7 @@ class AuditConfigTests(unittest.TestCase):
                 ".agents/models/default.yaml"
             ].replace("model: test-model", "model: your-model-id")
             files[".agents/audit.yaml"] = (
-                "apiVersion: dotagent/v1alpha1\n"
+                "apiVersion: lubanlock/v1alpha1\n"
                 "kind: AuditConfig\n"
                 "rules:\n"
                 "  AUD001: {enabled: false}\n"
@@ -304,7 +304,7 @@ class AuditConfigTests(unittest.TestCase):
             files = minimal_project()
             files["AGENTS.md"] = "# Role\n\nTOKEN-12345\n"
             files[".agents/audit.yaml"] = (
-                "apiVersion: dotagent/v1alpha1\n"
+                "apiVersion: lubanlock/v1alpha1\n"
                 "kind: AuditConfig\n"
                 "secret_patterns: ['TOKEN-[0-9]+']\n"
             )
@@ -322,7 +322,7 @@ class CacheTests(unittest.TestCase):
             write_compiled(compiled, out)
             write_lock(compiled)
             refresh_cache(project, project / ".agents")
-            lock = read_lock(project / ".agents" / "dotagent.lock")
+            lock = read_lock(project / ".agents" / "lubanlock.lock")
             agents = project / "AGENTS.md"
             future = time.time() + 100
             os.utime(agents, (future, future))
@@ -662,7 +662,7 @@ class ExtraProjectionTests(unittest.TestCase):
         self.assertTrue(payload["tools"])
 
     def test_openai_chat_import(self):
-        from dotagent.integrations import import_openai
+        from lubanlock.integrations import import_openai
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -676,7 +676,7 @@ class ExtraProjectionTests(unittest.TestCase):
             self.assertIsNotNone(definition.tool("web-search"))
 
     def test_openai_agent_import(self):
-        from dotagent.integrations import import_openai
+        from lubanlock.integrations import import_openai
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

@@ -58,7 +58,7 @@
         "context_window": 128000,
         "description": "Generic tool-calling model accessed through an OpenAI-compatible endpoint.",
         "endpoint": {
-          "api_key_env": "DOTAGENT_API_KEY",
+          "api_key_env": "LUBANLOCK_API_KEY",
           "base_url": "https://api.example.com/v1"
         },
         "file": "models/default.yaml",
@@ -70,7 +70,7 @@
         },
         "provider": "openai-compatible",
         "provider_options": {
-          "note": "TODO: fill in provider-specific options. DotAgent stores this object verbatim and does not assume any vendor schema."
+          "note": "TODO: fill in provider-specific options. LubanLock stores this object verbatim and does not assume any vendor schema."
         },
         "version": "0.1.0"
       }
@@ -589,7 +589,7 @@
       }
     }
   },
-  "apiVersion": "dotagent/v1alpha1",
+  "apiVersion": "lubanlock/v1alpha1",
   "assets": {
     "AGENTS.md": {
       "mediaType": "text/markdown",
@@ -634,7 +634,7 @@
   },
   "fingerprint": "sha256:83c59b3cfea3d23c61fddaab16acbb8cafbec9cb6e40f84071c5bbc4a40583ee",
   "generator": {
-    "name": "dotagent",
+    "name": "lubanlock",
     "version": "0.3.1"
   },
   "kind": "CompiledAgent"

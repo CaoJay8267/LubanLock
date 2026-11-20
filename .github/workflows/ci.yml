@@ -26,9 +26,9 @@ jobs:
       - name: Lint
         run: |
           ruff --version
-          ruff check dotagent tests scripts --output-format github
+          ruff check lubanlock tests scripts --output-format github
       - name: Type check
-        run: mypy dotagent
+        run: mypy lubanlock
       - name: Unit tests
         shell: bash
         run: |
@@ -81,7 +81,7 @@ jobs:
         run: python -m pip install dist/*.whl
       - name: Smoke test
         run: |
-          dotagent --version
-          dotagent init smoke --path "$RUNNER_TEMP/smoke"
-          dotagent validate "$RUNNER_TEMP/smoke"
-          dotagent test "$RUNNER_TEMP/smoke" --suite limits
+          lubanlock --version
+          lubanlock init smoke --path "$RUNNER_TEMP/smoke"
+          lubanlock validate "$RUNNER_TEMP/smoke"
+          lubanlock test "$RUNNER_TEMP/smoke" --suite limits

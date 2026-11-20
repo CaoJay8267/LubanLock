@@ -2,11 +2,11 @@
 
 ## 工具（Tool）
 
-工具是声明，不是实现。DotAgent 只保存名称、描述、JSON Schema 与注解。
+工具是声明，不是实现。Luban Lock 只保存名称、描述、JSON Schema 与注解。
 
 ```yaml
 # .agents/tools/web_search.yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Tool
 metadata:
   name: web_search
@@ -41,7 +41,7 @@ spec:
 ```
 
 - `input_schema` 根类型必须是 `object`；
-- 支持的关键字见 `dotagent schema tool`；
+- 支持的关键字见 `lubanlock schema tool`；
 - 不支持的关键字会显式报错，避免“看起来生效、实际没校验”；
 - `source.kind=mcp` 且 `ref=server/...` 时，会检查 `mcp.json` 是否声明该 server。
 
@@ -51,7 +51,7 @@ spec:
 
 ```yaml
 # .agents/models/default.yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Model
 metadata:
   name: default
@@ -77,7 +77,7 @@ spec:
 ## 工作流（Workflow）
 
 ```yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Workflow
 metadata:
   name: quick-research
@@ -114,7 +114,7 @@ v0.3 不支持条件表达式、数据映射、重试与循环；这些属于宿
 ## 任务（Task）
 
 ```yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Task
 metadata:
   name: summarize

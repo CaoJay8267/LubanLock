@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lubanlock.dev/schemas/v1alpha1/audit.schema.json",
+  "title": "LubanLock audit configuration (.agents/audit.yaml)",
+  "type": "object",
+  "required": ["apiVersion", "kind"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "lubanlock/v1alpha1" },
+    "kind": { "const": "AuditConfig" },
+    "rules": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+          "category": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "parameters": { "type": "object" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "uniqueItems": true,
+            "maxItems": 64
+          },
+          "when": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "uniqueItems": true,
+            "maxItems": 64
+          },
+          "unless": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "uniqueItems": true,
+            "maxItems": 64
+          }
+        }
+      }
+    },
+    "secret_patterns": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 50
+    },
+    "risky_tool_names": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "uniqueItems": true,
+      "maxItems": 64
+    },
+    "budget_warning_ratio": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "ignore_paths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+      "maxItems": 100
+    }
+  }
+}

@@ -13,7 +13,7 @@ keys/
 .coverage
 coverage.xml
 htmlcov/
-.dotagent/
+.lubanlock/
 resource/
 # The proposal document is intentionally kept out of version control.
 document/prompt.md

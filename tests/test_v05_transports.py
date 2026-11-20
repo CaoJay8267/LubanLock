@@ -58,7 +58,7 @@ class _SseHandler(BaseHTTPRequestHandler):
 
 class SseTransportTests(unittest.TestCase):
     def test_legacy_sse(self):
-        from dotagent.integrations.mcp_client import discover_server
+        from lubanlock.integrations.mcp_client import discover_server
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), _SseHandler)
         server.sse_writer = None
@@ -83,7 +83,7 @@ class WebSocketTransportTests(unittest.TestCase):
             from websockets.sync.server import serve
         except ImportError:
             self.skipTest("websockets is not installed")
-        from dotagent.integrations.mcp_client import discover_server
+        from lubanlock.integrations.mcp_client import discover_server
 
         def handler(websocket):
             for raw in websocket:

@@ -10,11 +10,11 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from dotagent.cli import main
-from dotagent.core.errors import TestRunError
-from dotagent.testkit import run_tests
-from dotagent.testkit.checks import evaluate, resolve_path
-from dotagent.testkit.fixtures import (
+from lubanlock.cli import main
+from lubanlock.core.errors import TestRunError
+from lubanlock.testkit import run_tests
+from lubanlock.testkit.checks import evaluate, resolve_path
+from lubanlock.testkit.fixtures import (
     copy_project,
     minimal_project,
     write_project,
@@ -290,7 +290,7 @@ for line in sys.stdin:
     def test_schema(self):
         code, out, _ = run_cli("schema", "agent")
         self.assertEqual(code, 0)
-        self.assertIn("DotAgent agent manifest", out)
+        self.assertIn("LubanLock agent manifest", out)
         code, out, _ = run_cli("schema")
         self.assertEqual(code, 0)
         self.assertIn("common.schema.json", out)

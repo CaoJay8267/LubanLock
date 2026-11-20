@@ -8,7 +8,7 @@ v0.3 提供两种**静态可判定**的复用机制。
 
 ```yaml
 # .agents/tools/echo-upper.yaml
-apiVersion: dotagent/v1alpha1
+apiVersion: lubanlock/v1alpha1
 kind: Tool
 extends: echo
 metadata:
@@ -66,13 +66,13 @@ uses: [helper]        # 等价于 agents: [helper]
 运行时可以查看层级：
 
 ```python
-runtime = dotagent.AgentRuntime.from_path("resource/agent/demo")
+runtime = lubanlock.AgentRuntime.from_path("resource/agent/demo")
 print(runtime.subagent_tree("reviewer"))
 ```
 
 ## 跨 Agent 共享库
 
-`spec.uses` 显式导入另一个 DotAgent 工程的工具与模型：
+`spec.uses` 显式导入另一个 Luban Lock 工程的工具与模型：
 
 ```yaml
 spec:

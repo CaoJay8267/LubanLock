@@ -7,7 +7,7 @@ python -m venv .venv
 .venv/Scripts/activate        # Windows
 # source .venv/bin/activate   # POSIX
 pip install -e .
-dotagent --version
+lubanlock --version
 ```
 
 需要 Python 3.11+。仅运行签名功能时需要额外的 `cryptography`：
@@ -19,13 +19,13 @@ pip install -e ".[signing]"
 ## 2. 创建 Agent
 
 ```bash
-dotagent init research-agent
+lubanlock init research-agent
 ```
 
 默认生成到 `resource/agent/research-agent/`。也可以指定路径：
 
 ```bash
-dotagent init research-agent --path ./my-agents/research-agent
+lubanlock init research-agent --path ./my-agents/research-agent
 ```
 
 模板：
@@ -46,7 +46,7 @@ resource/agent/research-agent/
 ## 4. 校验
 
 ```bash
-dotagent validate research-agent
+lubanlock validate research-agent
 ```
 
 输出示例：
@@ -66,20 +66,20 @@ no problems found
 ## 5. 测试
 
 ```bash
-dotagent test research-agent
+lubanlock test research-agent
 ```
 
 内置套件：工作流、预算、golden、确定性、打包、自定义 checks。首次运行 golden 会跳过；
 确认输出后执行：
 
 ```bash
-dotagent test research-agent --update
+lubanlock test research-agent --update
 ```
 
 ## 6. 编译
 
 ```bash
-dotagent compile research-agent
+lubanlock compile research-agent
 ```
 
 产物在 `build/`：
@@ -93,14 +93,14 @@ build/
 `--check` 用于 CI 检查产物是否过期：
 
 ```bash
-dotagent compile research-agent --check
+lubanlock compile research-agent --check
 ```
 
 ## 7. 审计与可视化
 
 ```bash
-dotagent audit research-agent
-dotagent visualize research-agent
+lubanlock audit research-agent
+lubanlock visualize research-agent
 ```
 
 报告在 `reports/audit/`，图在 `reports/visual/`。

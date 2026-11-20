@@ -9,10 +9,10 @@ from pathlib import Path
 
 import yaml
 
-from dotagent.build.compiler import check_compiled, compile_agent, write_compiled
-from dotagent.core.utils import safe_load_yaml
-from dotagent.spec.loader import load_source
-from dotagent.spec.schema import (
+from lubanlock.build.compiler import check_compiled, compile_agent, write_compiled
+from lubanlock.core.utils import safe_load_yaml
+from lubanlock.spec.loader import load_source
+from lubanlock.spec.schema import (
     AGENT_SCHEMA,
     SCHEMA_DIR,
     check_all_schemas,
@@ -20,9 +20,9 @@ from dotagent.spec.schema import (
     lint_json_schema,
     validate_document,
 )
-from dotagent.spec.schema.validator import validate_instance
-from dotagent.spec.validator import validate_source
-from dotagent.testkit.fixtures import (
+from lubanlock.spec.schema.validator import validate_instance
+from lubanlock.spec.validator import validate_source
+from lubanlock.testkit.fixtures import (
     minimal_project,
     skill_front_matter,
     tool_yaml,
@@ -61,7 +61,7 @@ class SchemaTests(unittest.TestCase):
 
     def test_minimal_agent_manifest_is_valid(self):
         manifest = {
-            "apiVersion": "dotagent/v1alpha1",
+            "apiVersion": "lubanlock/v1alpha1",
             "kind": "Agent",
             "metadata": {"name": "agent"},
         }
@@ -69,7 +69,7 @@ class SchemaTests(unittest.TestCase):
 
     def test_missing_name_reports_required(self):
         diagnostics = validate_document(
-            {"apiVersion": "dotagent/v1alpha1", "kind": "Agent", "metadata": {}},
+            {"apiVersion": "lubanlock/v1alpha1", "kind": "Agent", "metadata": {}},
             AGENT_SCHEMA,
             path=".agents/agent.yaml",
         )
@@ -79,7 +79,7 @@ class SchemaTests(unittest.TestCase):
     def test_unknown_property_is_rejected(self):
         diagnostics = validate_document(
             {
-                "apiVersion": "dotagent/v1alpha1",
+                "apiVersion": "lubanlock/v1alpha1",
                 "kind": "Agent",
                 "metadata": {"name": "agent"},
                 "surprise": True,
@@ -91,7 +91,7 @@ class SchemaTests(unittest.TestCase):
     def test_wrong_type_is_reported(self):
         diagnostics = validate_document(
             {
-                "apiVersion": "dotagent/v1alpha1",
+                "apiVersion": "lubanlock/v1alpha1",
                 "kind": "Agent",
                 "metadata": {"name": "agent", "description": 7},
             },
@@ -102,7 +102,7 @@ class SchemaTests(unittest.TestCase):
     def test_name_pattern_is_enforced(self):
         diagnostics = validate_document(
             {
-                "apiVersion": "dotagent/v1alpha1",
+                "apiVersion": "lubanlock/v1alpha1",
                 "kind": "Agent",
                 "metadata": {"name": "Bad_Name"},
             },
@@ -113,7 +113,7 @@ class SchemaTests(unittest.TestCase):
     def test_duplicate_tags_are_rejected(self):
         diagnostics = validate_document(
             {
-                "apiVersion": "dotagent/v1alpha1",
+                "apiVersion": "lubanlock/v1alpha1",
                 "kind": "Agent",
                 "metadata": {"name": "agent", "tags": ["a", "a"]},
             },
@@ -124,7 +124,7 @@ class SchemaTests(unittest.TestCase):
     def test_instructions_string_shorthand(self):
         for instructions in ("instructions.md", {"file": "instructions.md"}, {"text": "Hi"}):
             manifest = {
-                "apiVersion": "dotagent/v1alpha1",
+                "apiVersion": "lubanlock/v1alpha1",
                 "kind": "Agent",
                 "metadata": {"name": "agent"},
                 "spec": {"instructions": instructions},
@@ -231,7 +231,7 @@ class LoaderTests(unittest.TestCase):
             files = {
                 "AGENTS.md": "# Role\n",
                 ".agent/agent.yaml": (
-                    "apiVersion: dotagent/v1alpha1\n"
+                    "apiVersion: lubanlock/v1alpha1\n"
                     "kind: Agent\n"
                     "metadata:\n  name: old\n  description: Old.\n"
                 ),
@@ -316,7 +316,7 @@ class ValidationTests(unittest.TestCase):
     def test_workflow_cycle(self):
         files = minimal_project()
         files[".agents/workflows/flow.yaml"] = (
-            "apiVersion: dotagent/v1alpha1\n"
+            "apiVersion: lubanlock/v1alpha1\n"
             "kind: Workflow\n"
             "metadata:\n  name: flow\n"
             "spec:\n"
@@ -334,7 +334,7 @@ class ValidationTests(unittest.TestCase):
     def test_duplicate_node_ids(self):
         files = minimal_project()
         files[".agents/workflows/flow.yaml"] = (
-            "apiVersion: dotagent/v1alpha1\n"
+            "apiVersion: lubanlock/v1alpha1\n"
             "kind: Workflow\n"
             "metadata:\n  name: flow\n"
             "spec:\n"
@@ -349,7 +349,7 @@ class ValidationTests(unittest.TestCase):
     def test_missing_workflow_entry(self):
         files = minimal_project()
         files[".agents/workflows/flow.yaml"] = (
-            "apiVersion: dotagent/v1alpha1\n"
+            "apiVersion: lubanlock/v1alpha1\n"
             "kind: Workflow\n"
             "metadata:\n  name: flow\n"
             "spec:\n"
@@ -363,7 +363,7 @@ class ValidationTests(unittest.TestCase):
     def test_unknown_task_reference(self):
         files = minimal_project()
         files[".agents/workflows/flow.yaml"] = (
-            "apiVersion: dotagent/v1alpha1\n"
+            "apiVersion: lubanlock/v1alpha1\n"
             "kind: Workflow\n"
             "metadata:\n  name: flow\n"
             "spec:\n"
@@ -387,7 +387,7 @@ class ValidationTests(unittest.TestCase):
     def test_task_example_is_validated_against_input_schema(self):
         files = minimal_project()
         files[".agents/tasks/run.yaml"] = (
-            "apiVersion: dotagent/v1alpha1\n"
+            "apiVersion: lubanlock/v1alpha1\n"
             "kind: Task\n"
             "metadata:\n  name: run\n  description: Run.\n"
             "spec:\n"
@@ -449,13 +449,13 @@ class CompilerTests(unittest.TestCase):
             )
             project = write_project(Path(directory), files)
             compile_agent(project)
-            from dotagent.core.errors import ValidationFailed
+            from lubanlock.core.errors import ValidationFailed
 
             with self.assertRaises(ValidationFailed):
                 compile_agent(project, strict=True)
 
     def test_invalid_agent_raises(self):
-        from dotagent.core.errors import ValidationFailed
+        from lubanlock.core.errors import ValidationFailed
 
         with tempfile.TemporaryDirectory() as directory:
             project = write_project(Path(directory), {"AGENTS.md": "# x\n", ".agents/agent.yaml": "kind: Agent\n"})
@@ -465,20 +465,20 @@ class CompilerTests(unittest.TestCase):
 
 class ApiTests(unittest.TestCase):
     def test_load_and_validate(self):
-        import dotagent
+        import lubanlock
 
-        agent = dotagent.load_agent(EXAMPLE)
+        agent = lubanlock.load_agent(EXAMPLE)
         self.assertEqual(agent.metadata.name, "research-agent")
-        result = dotagent.validate_agent(EXAMPLE)
+        result = lubanlock.validate_agent(EXAMPLE)
         self.assertTrue(result.ok)
 
     def test_invalid_agent_raises(self):
-        import dotagent
+        import lubanlock
 
         with tempfile.TemporaryDirectory() as directory:
             project = write_project(Path(directory), {"AGENTS.md": "# x\n", ".agents/agent.yaml": "kind: Agent\n"})
-            with self.assertRaises(dotagent.ValidationFailed):
-                dotagent.load_agent(project)
+            with self.assertRaises(lubanlock.ValidationFailed):
+                lubanlock.load_agent(project)
 
 
 if __name__ == "__main__":

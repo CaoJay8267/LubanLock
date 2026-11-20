@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lubanlock.dev/schemas/v1alpha1/model.schema.json",
+  "title": "LubanLock model declaration (.agent/models/<name>.yaml)",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "lubanlock/v1alpha1" },
+    "extends": { "$ref": "common.schema.json#/$defs/name" },
+    "kind": { "const": "Model" },
+    "metadata": { "$ref": "common.schema.json#/$defs/metadata" },
+    "spec": { "$ref": "#/$defs/spec" }
+  },
+  "$defs": {
+    "spec": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Provider-agnostic model identifier, stored verbatim."
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Free-form provider label, e.g. 'openai-compatible'. LubanLock never interprets it."
+        },
+        "context_window": { "type": "integer", "minimum": 1 },
+        "max_output_tokens": { "type": "integer", "minimum": 1 },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tool_calling", "vision", "reasoning", "json_mode"]
+          },
+          "uniqueItems": true
+        },
+        "endpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "base_url": {
+              "type": "string",
+              "pattern": "^https?://",
+              "maxLength": 512
+            },
+            "api_key_env": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "maxLength": 128
+            }
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "top_p": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "max_output_tokens": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "provider_options": {
+          "type": "object",
+          "description": "Opaque provider-specific bag. LubanLock stores it and emits a TODO: no provider schema is assumed."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lubanlock.dev/schemas/v1alpha1/subagent.schema.json",
+  "title": "LubanLock subagent front matter (.agent/subagents/<name>.md)",
+  "type": "object",
+  "required": ["name", "description"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "$ref": "common.schema.json#/$defs/name" },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "tags": { "$ref": "common.schema.json#/$defs/tags" },
+    "labels": { "$ref": "common.schema.json#/$defs/labels" },
+    "model": { "$ref": "common.schema.json#/$defs/name" },
+    "extends": { "$ref": "common.schema.json#/$defs/name" },
+    "agents": {
+      "type": "array",
+      "description": "Nested child subagents (statically declared, acyclic).",
+      "items": { "$ref": "common.schema.json#/$defs/name" },
+      "uniqueItems": true,
+      "maxItems": 64
+    },
+    "uses": {
+      "type": "array",
+      "description": "Alias for agents: child subagents this subagent composes.",
+      "items": { "$ref": "common.schema.json#/$defs/name" },
+      "uniqueItems": true,
+      "maxItems": 64
+    },
+    "tools": {
+      "type": "array",
+      "description": "Tool names available to this subagent. Absent means 'all tools of the parent agent'.",
+      "items": { "$ref": "common.schema.json#/$defs/name" },
+      "uniqueItems": true,
+      "maxItems": 64
+    },
+    "skills": {
+      "type": "array",
+      "description": "Skill names this subagent may use.",
+      "items": { "$ref": "common.schema.json#/$defs/name" },
+      "uniqueItems": true,
+      "maxItems": 64
+    }
+  }
+}
