@@ -1,0 +1,28 @@
+apiVersion: dotagent/v1alpha1
+kind: Tool
+metadata:
+  name: save_note
+  description: Persist a short research note under a title.
+  tags:
+    - notes
+spec:
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+      - title
+      - body
+    properties:
+      title:
+        type: string
+        minLength: 1
+        maxLength: 120
+      body:
+        type: string
+        minLength: 1
+  annotations:
+    idempotent: false
+    destructive: false
+  source:
+    kind: builtin
+    ref: save_note

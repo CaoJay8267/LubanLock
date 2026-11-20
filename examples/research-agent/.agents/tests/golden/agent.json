@@ -1,0 +1,553 @@
+{
+  "agent": {
+    "defaults": {
+      "max_steps": 12,
+      "temperature": 0.2
+    },
+    "description": "Plans, researches and summarises questions with cited sources.",
+    "files": [
+      ".agents/agent.yaml",
+      ".agents/agents/source-checker.md",
+      ".agents/knowledge/product-brief.md",
+      ".agents/models/default.yaml",
+      ".agents/prompts/plan-research.md",
+      ".agents/skills/citation-format/SKILL.md",
+      ".agents/skills/web-research/SKILL.md",
+      ".agents/skills/web-research/checklist.md",
+      ".agents/tasks/plan-research.yaml",
+      ".agents/tasks/summarize.yaml",
+      ".agents/tools/save_note.yaml",
+      ".agents/tools/web_fetch.yaml",
+      ".agents/tools/web_search.yaml",
+      ".agents/workflows/quick-research.yaml",
+      "AGENTS.md"
+    ],
+    "instructions": {
+      "file": "AGENTS.md",
+      "text": "# Role\n\nYou are a careful research assistant. You answer questions by finding primary\nsources, checking them against each other, and stating clearly what is known,\nwhat is uncertain, and what is missing.\n\n# Operating rules\n\n1. Restate the question and list the sub-questions before searching.\n2. Prefer primary sources (specifications, official documentation, papers).\n   Treat blog posts as leads, not evidence.\n3. Never invent a citation. If a claim cannot be verified, say so.\n4. Keep the final answer short: findings first, then evidence, then caveats.\n5. When a task asks for notes, save them with the `save_note` tool instead of\n   keeping them only in the conversation."
+    },
+    "knowledge": {
+      "product-brief": {
+        "content": "# Product brief\n\nThe research agent supports developers who need a trustworthy first pass over\nan unfamiliar topic. It is optimised for questions that can be answered from\npublic sources, not for private or paywalled material.\n\nSuccess looks like: a short answer, a ranked evidence list, and an explicit\nlist of open questions. It is not a chatbot persona exercise; tone stays\nneutral and factual.",
+        "description": "What this research agent is for and who it serves.",
+        "file": "knowledge/product-brief.md",
+        "name": "product-brief",
+        "priority": "normal",
+        "tags": [
+          "product"
+        ],
+        "title": "Product brief",
+        "version": "0.1.0"
+      }
+    },
+    "limits": {
+      "knowledge_chars": 20000,
+      "skill_count": 8,
+      "subagent_count": 4,
+      "tool_count": 8
+    },
+    "model": "default",
+    "models": {
+      "default": {
+        "capabilities": [
+          "tool_calling",
+          "reasoning"
+        ],
+        "context_window": 128000,
+        "description": "Generic tool-calling model accessed through an OpenAI-compatible endpoint.",
+        "endpoint": {
+          "api_key_env": "DOTAGENT_API_KEY",
+          "base_url": "https://api.example.com/v1"
+        },
+        "file": "models/default.yaml",
+        "max_output_tokens": 8192,
+        "model": "your-model-id",
+        "name": "default",
+        "parameters": {
+          "temperature": 0.2
+        },
+        "provider": "openai-compatible",
+        "provider_options": {
+          "note": "TODO: fill in provider-specific options. DotAgent stores this object verbatim and does not assume any vendor schema."
+        },
+        "version": "0.1.0"
+      }
+    },
+    "name": "research-agent",
+    "settings": {
+      "audience": "developers"
+    },
+    "skills": {
+      "citation-format": {
+        "description": "Render findings with stable, verifiable citations.",
+        "file": "skills/citation-format/SKILL.md",
+        "instructions": "# Citation format\n\nUse numbered citations in square brackets and a source list at the end:\n\n```text\nFinding text [1].\n\n[1] Title — https://example.com/page (accessed 2026-01-01)\n```\n\nRules:\n\n- Cite the page that contains the claim, not a search-result page.\n- Keep the access date in ISO 8601 form.\n- If two sources disagree, present both and label the conflict.",
+        "metadata": {
+          "version": "0.1.0"
+        },
+        "name": "citation-format"
+      },
+      "web-research": {
+        "allowed_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "description": "Plan and execute a web investigation with primary sources.",
+        "file": "skills/web-research/SKILL.md",
+        "files": [
+          "skills/web-research/checklist.md"
+        ],
+        "instructions": "# Web research\n\n1. Turn the question into two to five search queries with different wording.\n2. Run `web_search`, then open the most promising results with `web_fetch`.\n3. For every claim, record the URL and the exact sentence that supports it.\n4. Cross-check each important claim in a second independent source.\n5. Stop when new searches only repeat sources you already have.\n\nUse [checklist.md](checklist.md) when you need the detailed review checklist.",
+        "metadata": {
+          "version": "0.1.0"
+        },
+        "name": "web-research"
+      }
+    },
+    "subagents": {
+      "source-checker": {
+        "description": "Verifies claims against their cited sources and reports conflicts.",
+        "file": "agents/source-checker.md",
+        "instructions": "You are a verification specialist. For every claim you receive:\n\n1. Open the cited URL and quote the sentence that supports or contradicts it.\n2. Mark the claim `supported`, `unclear` or `contradicted`.\n3. If a source is unavailable, say so instead of guessing.\n\nReturn a compact table: claim id, verdict, evidence quote, source URL.",
+        "model": "default",
+        "name": "source-checker",
+        "skills": [
+          "citation-format"
+        ],
+        "tools": [
+          "web_fetch"
+        ],
+        "version": "0.1.0"
+      }
+    },
+    "tags": [
+      "research",
+      "example"
+    ],
+    "tasks": {
+      "plan-research": {
+        "description": "Decompose a research question into searchable sub-questions.",
+        "examples": [
+          {
+            "input": {
+              "question": "Does the project support Windows?"
+            },
+            "output": {
+              "subquestions": [
+                "Which Windows versions are documented?",
+                "Are there platform-specific limitations?"
+              ]
+            }
+          }
+        ],
+        "file": "tasks/plan-research.yaml",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "question": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "type": "object"
+        },
+        "name": "plan-research",
+        "output_schema": {
+          "properties": {
+            "subquestions": {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "subquestions"
+          ],
+          "type": "object"
+        },
+        "prompt": {
+          "file": "prompts/plan-research.md",
+          "text": "# Planning prompt\n\nYou are planning a web investigation.\n\n1. Rewrite the question in your own words.\n2. List two to five sub-questions that together answer it.\n3. For each sub-question, name the kind of source that would count as\n   authoritative.\n4. Return the sub-questions as a JSON array. Do not answer the question yet."
+        },
+        "skills": [
+          "web-research"
+        ],
+        "tags": [
+          "planning"
+        ],
+        "version": "0.1.0"
+      },
+      "summarize": {
+        "description": "Turn verified findings into a short cited answer.",
+        "examples": [
+          {
+            "description": "Two findings with one open question.",
+            "input": {
+              "findings": [
+                "The spec is marked stable since 2025 [1].",
+                "A deprecation is proposed for 2027 [2]."
+              ],
+              "question": "Is the format stable?"
+            },
+            "output": {
+              "answer": "Findings: ... Evidence: ... Open questions: ..."
+            }
+          }
+        ],
+        "file": "tasks/summarize.yaml",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "findings": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "question",
+            "findings"
+          ],
+          "type": "object"
+        },
+        "name": "summarize",
+        "output_schema": {
+          "properties": {
+            "answer": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "answer"
+          ],
+          "type": "object"
+        },
+        "prompt": {
+          "text": "Write the final answer in three sections: Findings, Evidence, Open\nquestions. Use numbered citations from the citation format. Never add a\nclaim that is not backed by one of the provided findings."
+        },
+        "skills": [
+          "citation-format"
+        ],
+        "tags": [
+          "writing"
+        ],
+        "tools": [
+          "save_note"
+        ],
+        "version": "0.1.0",
+        "workflow": "quick-research"
+      }
+    },
+    "title": "Research Agent",
+    "tools": {
+      "save_note": {
+        "annotations": {
+          "destructive": false,
+          "idempotent": false
+        },
+        "description": "Persist a short research note under a title.",
+        "file": "tools/save_note.yaml",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "body"
+          ],
+          "type": "object"
+        },
+        "name": "save_note",
+        "source": {
+          "kind": "builtin",
+          "ref": "save_note"
+        },
+        "tags": [
+          "notes"
+        ],
+        "version": "0.1.0"
+      },
+      "web_fetch": {
+        "annotations": {
+          "idempotent": true,
+          "open_world": true,
+          "read_only": true
+        },
+        "description": "Fetch a URL and return its readable text content.",
+        "file": "tools/web_fetch.yaml",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "url": {
+              "maxLength": 2048,
+              "pattern": "^https?://",
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        },
+        "name": "web_fetch",
+        "output_schema": {
+          "properties": {
+            "content_type": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "kind": "builtin",
+          "ref": "web_fetch"
+        },
+        "tags": [
+          "web"
+        ],
+        "version": "0.1.0"
+      },
+      "web_search": {
+        "annotations": {
+          "idempotent": true,
+          "open_world": true,
+          "read_only": true
+        },
+        "description": "Search the public web and return candidate results with titles and URLs.",
+        "file": "tools/web_search.yaml",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "query": {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "type": "object"
+        },
+        "name": "web_search",
+        "output_schema": {
+          "properties": {
+            "results": {
+              "items": {
+                "properties": {
+                  "snippet": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "results"
+          ],
+          "type": "object"
+        },
+        "source": {
+          "kind": "builtin",
+          "ref": "web_search"
+        },
+        "tags": [
+          "web"
+        ],
+        "version": "0.1.0"
+      }
+    },
+    "version": "0.1.0",
+    "workflows": {
+      "quick-research": {
+        "description": "Plan, search, verify and summarise a research question.",
+        "edges": [
+          {
+            "from": "plan",
+            "to": "search"
+          },
+          {
+            "from": "plan",
+            "to": "note"
+          },
+          {
+            "from": "search",
+            "to": "gather"
+          },
+          {
+            "from": "note",
+            "to": "gather"
+          },
+          {
+            "from": "gather",
+            "to": "verify"
+          },
+          {
+            "from": "verify",
+            "to": "summarize"
+          },
+          {
+            "from": "summarize",
+            "to": "review"
+          }
+        ],
+        "entry": "plan",
+        "file": "workflows/quick-research.yaml",
+        "name": "quick-research",
+        "nodes": [
+          {
+            "id": "plan",
+            "kind": "task",
+            "outputs": [
+              "question",
+              "subquestions"
+            ],
+            "ref": "plan-research"
+          },
+          {
+            "id": "search",
+            "inputs": [
+              "query"
+            ],
+            "kind": "tool",
+            "outputs": [
+              "results"
+            ],
+            "ref": "web_search"
+          },
+          {
+            "id": "note",
+            "inputs": [
+              "title",
+              "body"
+            ],
+            "kind": "tool",
+            "ref": "save_note"
+          },
+          {
+            "id": "gather",
+            "inputs": [
+              "results",
+              "note_id"
+            ],
+            "kind": "join"
+          },
+          {
+            "id": "verify",
+            "kind": "subagent",
+            "outputs": [
+              "verdicts"
+            ],
+            "ref": "source-checker"
+          },
+          {
+            "id": "summarize",
+            "kind": "task",
+            "outputs": [
+              "answer"
+            ],
+            "ref": "summarize"
+          },
+          {
+            "description": "A person checks the cited answer before it is sent.",
+            "id": "review",
+            "kind": "human",
+            "title": "Human review"
+          }
+        ],
+        "tags": [
+          "research"
+        ],
+        "version": "0.1.0"
+      }
+    }
+  },
+  "apiVersion": "dotagent/v1alpha1",
+  "assets": {
+    "AGENTS.md": {
+      "mediaType": "text/markdown",
+      "sha256": "6a1da3e2ab529e03f5e2a13768bc2d631bc4429ff2990c9784271c7b7ecd9392",
+      "size": 677
+    },
+    "agents/source-checker.md": {
+      "mediaType": "text/markdown",
+      "sha256": "e5c0f8f2263507c55300d08c26b0d058a8b8db7cb9acb34bb4aaf426912f75cd",
+      "size": 508
+    },
+    "knowledge/product-brief.md": {
+      "mediaType": "text/markdown",
+      "sha256": "e8aa1ef150271d175def4e89836c86989c7138818bdec127f9ab02caa5822ce8",
+      "size": 547
+    },
+    "prompts/plan-research.md": {
+      "mediaType": "text/markdown",
+      "sha256": "f523ee2db684dc4c38121a5e0882d9dd5ea5c74d820d876b7199ec731512d49d",
+      "size": 325
+    },
+    "skills/citation-format/SKILL.md": {
+      "mediaType": "text/markdown",
+      "sha256": "559ef09863993b9c6c85ec87fdc534a2338ca770af7e93807027c4ba4543d18e",
+      "size": 489
+    },
+    "skills/web-research/SKILL.md": {
+      "mediaType": "text/markdown",
+      "sha256": "9a8604727a6f887c84b4a7e95efde2700033ae8f00d980403c044d68f9cd4ecc",
+      "size": 621
+    },
+    "skills/web-research/checklist.md": {
+      "mediaType": "text/markdown",
+      "sha256": "4b036e26cf68234ee01aaa8de7e7b27651f85ba08e6e382c9ada8a27474c416e",
+      "size": 302
+    }
+  },
+  "fingerprint": "sha256:fb31c6984812de430b1a90bb57fbd9abd5041768a113d4c8b959a8e4576d982f",
+  "generator": {
+    "name": "dotagent",
+    "version": "0.2.0"
+  },
+  "kind": "CompiledAgent"
+}

@@ -1,0 +1,22 @@
+apiVersion: dotagent/v1alpha1
+kind: Agent
+metadata:
+  name: research-agent
+  title: Research Agent
+  description: Plans, researches and summarises questions with cited sources.
+  version: 0.1.0
+  tags:
+    - research
+    - example
+spec:
+  model: default
+  defaults:
+    temperature: 0.2
+    max_steps: 12
+  limits:
+    knowledge_chars: 20000
+    skill_count: 8
+    tool_count: 8
+    subagent_count: 4
+  settings:
+    audience: developers

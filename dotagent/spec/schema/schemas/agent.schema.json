@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dotagent.dev/schemas/v1alpha1/agent.schema.json",
+  "title": "DotAgent agent manifest (.agent/agent.yaml)",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "dotagent/v1alpha1" },
+    "kind": { "const": "Agent" },
+    "metadata": { "$ref": "common.schema.json#/$defs/metadata" },
+    "spec": { "$ref": "#/$defs/spec" }
+  },
+  "$defs": {
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instructions": { "$ref": "common.schema.json#/$defs/instructionSourceRef" },
+        "model": { "$ref": "common.schema.json#/$defs/name" },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "max_steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "max_output_tokens": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "limits": { "$ref": "#/$defs/limits" },
+        "settings": {
+          "type": "object",
+          "description": "Host-specific settings. DotAgent stores them verbatim and never interprets them."
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "knowledge_chars": { "type": "integer", "minimum": 0 },
+        "skill_count": { "type": "integer", "minimum": 0 },
+        "tool_count": { "type": "integer", "minimum": 0 },
+        "subagent_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

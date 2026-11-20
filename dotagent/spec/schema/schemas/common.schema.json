@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dotagent.dev/schemas/v1alpha1/common.schema.json",
+  "title": "DotAgent shared definitions",
+  "$defs": {
+    "name": {
+      "type": "string",
+      "description": "A DotAgent identifier: lowercase, at most 64 characters, with single '-' or '_' separators.",
+      "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "version": {
+      "type": "string",
+      "description": "A semantic version such as 1.2.3 or 1.2.3-rc.1.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 64
+    },
+    "tags": {
+      "type": "array",
+      "description": "Free-form labels used for discovery and filtering.",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
+        "maxLength": 32
+      },
+      "uniqueItems": true,
+      "maxItems": 20
+    },
+    "labels": {
+      "type": "object",
+      "description": "Opaque key/value metadata.",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 128
+      },
+      "maxProperties": 20
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Identity block shared by every DotAgent entity.",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "version": { "$ref": "#/$defs/version" },
+        "labels": { "$ref": "#/$defs/labels" },
+        "tags": { "$ref": "#/$defs/tags" }
+      }
+    },
+    "instructionSource": {
+      "type": "object",
+      "description": "Instructions given either inline or as a path relative to the agent root.",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "instructionSourceRef": {
+      "description": "A path string (shorthand for {file: ...}) or an explicit instruction source object.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        {
+          "$ref": "#/$defs/instructionSource"
+        }
+      ]
+    }
+  }
+}

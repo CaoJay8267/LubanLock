@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+dist/
+reports/
+keys/
+.venv/
+.idea/
+.pytest_cache/
+.ruff_cache/
+.dotagent/
+resource/
+# The proposal document is intentionally kept out of version control.
+document/prompt.md

@@ -1,0 +1,48 @@
+apiVersion: dotagent/v1alpha1
+kind: Task
+metadata:
+  name: summarize
+  description: Turn verified findings into a short cited answer.
+  tags:
+    - writing
+spec:
+  prompt:
+    text: |
+      Write the final answer in three sections: Findings, Evidence, Open
+      questions. Use numbered citations from the citation format. Never add a
+      claim that is not backed by one of the provided findings.
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+      - question
+      - findings
+    properties:
+      question:
+        type: string
+        minLength: 1
+      findings:
+        type: array
+        items:
+          type: string
+  output_schema:
+    type: object
+    required:
+      - answer
+    properties:
+      answer:
+        type: string
+  skills:
+    - citation-format
+  tools:
+    - save_note
+  workflow: quick-research
+  examples:
+    - description: Two findings with one open question.
+      input:
+        question: Is the format stable?
+        findings:
+          - "The spec is marked stable since 2025 [1]."
+          - "A deprecation is proposed for 2027 [2]."
+      output:
+        answer: "Findings: ... Evidence: ... Open questions: ..."

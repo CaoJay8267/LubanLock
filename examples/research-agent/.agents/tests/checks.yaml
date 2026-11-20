@@ -1,0 +1,18 @@
+apiVersion: dotagent/v1alpha1
+kind: Checks
+checks:
+  - id: has-web-search
+    description: The web_search tool is declared.
+    path: tools.web_search
+    op: exists
+  - id: search-requires-query
+    path: tools.web_search.input_schema.required
+    op: contains
+    value: query
+  - id: has-summarize-task
+    path: tasks.summarize
+    op: exists
+  - id: workflow-has-entry
+    path: workflows.quick-research.entry
+    op: equals
+    value: plan

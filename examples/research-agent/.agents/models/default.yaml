@@ -1,0 +1,22 @@
+apiVersion: dotagent/v1alpha1
+kind: Model
+metadata:
+  name: default
+  description: Generic tool-calling model accessed through an OpenAI-compatible endpoint.
+spec:
+  model: your-model-id
+  provider: openai-compatible
+  context_window: 128000
+  max_output_tokens: 8192
+  capabilities:
+    - tool_calling
+    - reasoning
+  endpoint:
+    base_url: https://api.example.com/v1
+    api_key_env: DOTAGENT_API_KEY
+  parameters:
+    temperature: 0.2
+  provider_options:
+    note: >-
+      TODO: fill in provider-specific options. DotAgent stores this object
+      verbatim and does not assume any vendor schema.

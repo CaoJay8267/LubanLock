@@ -1,0 +1,63 @@
+apiVersion: dotagent/v1alpha1
+kind: Workflow
+metadata:
+  name: quick-research
+  description: Plan, search, verify and summarise a research question.
+  tags:
+    - research
+spec:
+  entry: plan
+  nodes:
+    - id: plan
+      kind: task
+      ref: plan-research
+      outputs:
+        - question
+        - subquestions
+    - id: search
+      kind: tool
+      ref: web_search
+      inputs:
+        - query
+      outputs:
+        - results
+    - id: note
+      kind: tool
+      ref: save_note
+      inputs:
+        - title
+        - body
+    - id: gather
+      kind: join
+      inputs:
+        - results
+        - note_id
+    - id: verify
+      kind: subagent
+      ref: source-checker
+      outputs:
+        - verdicts
+    - id: summarize
+      kind: task
+      ref: summarize
+      outputs:
+        - answer
+    - id: review
+      kind: human
+      title: Human review
+      description: A person checks the cited answer before it is sent.
+  edges:
+    - from: plan
+      to: search
+    - from: plan
+      to: note
+    - from: search
+      to: gather
+    - from: note
+      to: gather
+    - from: gather
+      to: verify
+    - from: verify
+      to: summarize
+    - from: summarize
+      to: review

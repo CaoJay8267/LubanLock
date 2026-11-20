@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dotagent"
+version = "0.2.0"
+description = "Declarative, portable agent definitions built from AGENTS.md + .agents/"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "CaoJay8267" }]
+keywords = ["agent", "dotagent", "declarative", "portable", "skills"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Build Tools",
+]
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+signing = ["cryptography>=42"]
+
+[project.scripts]
+dotagent = "dotagent.cli:main"
+
+[project.entry-points."dotagent.projectors"]
+# Third-party projectors register here, e.g.
+# myprojector = "my_package:MyProjector"
+
+[project.entry-points."dotagent.runtime_adapters"]
+# Third-party runtime adapters register here.
+
+[tool.setuptools]
+packages = [
+    "dotagent",
+    "dotagent.core",
+    "dotagent.spec",
+    "dotagent.spec.schema",
+    "dotagent.build",
+    "dotagent.project",
+    "dotagent.runtime",
+    "dotagent.testkit",
+    "dotagent.audit",
+    "dotagent.integrations",
+    "dotagent.templates",
+]
+
+[tool.setuptools.package-data]
+dotagent = ["spec/schema/schemas/*.json", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

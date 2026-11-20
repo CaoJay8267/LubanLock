@@ -1,0 +1,302 @@
+"""Static audit of an agent definition.
+
+The audit is deliberately offline: it combines validation diagnostics with
+heuristics for risky tools, insecure endpoints, leaked-looking secrets and
+budget pressure.  It never executes tools or calls a model.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from dotagent.build.compiler import compile_agent
+from dotagent.core.errors import Diagnostic
+from dotagent.core.models import AgentDefinition
+from dotagent.spec.loader import load_source
+from dotagent.spec.validator import validate_source
+
+_SECRET_PATTERNS = (
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+)
+
+_RISKY_TOOL_NAMES = ("shell", "exec", "bash", "powershell", "cmd", "run_command")
+
+
+@dataclass(frozen=True)
+class AuditFinding:
+    code: str
+    severity: str  # error | warning | info
+    message: str
+    path: str | None = None
+    pointer: str = ""
+
+    def to_dict(self) -> dict:
+        data = {"code": self.code, "severity": self.severity, "message": self.message}
+        if self.path:
+            data["path"] = self.path
+        if self.pointer:
+            data["pointer"] = self.pointer
+        return data
+
+
+@dataclass(frozen=True)
+class AuditReport:
+    agent: str
+    root: str
+    fingerprint: str | None
+    generated_at: str
+    findings: tuple[AuditFinding, ...]
+    stats: dict
+    files: tuple[str, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return not any(finding.severity == "error" for finding in self.findings)
+
+    def counts(self) -> dict[str, int]:
+        result = {"error": 0, "warning": 0, "info": 0}
+        for finding in self.findings:
+            result[finding.severity] = result.get(finding.severity, 0) + 1
+        return result
+
+    def to_dict(self) -> dict:
+        return {
+            "agent": self.agent,
+            "root": self.root,
+            "fingerprint": self.fingerprint,
+            "generatedAt": self.generated_at,
+            "ok": self.ok,
+            "counts": self.counts(),
+            "stats": self.stats,
+            "findings": [finding.to_dict() for finding in self.findings],
+        }
+
+    def to_markdown(self) -> str:
+        counts = self.counts()
+        lines = [
+            f"# 审计报告：{self.agent}",
+            "",
+            f"- 生成时间（UTC）：`{self.generated_at}`",
+            f"- 项目根目录：`{self.root}`",
+            f"- 指纹：`{self.fingerprint or '未编译'}`",
+            f"- 结论：{'通过' if self.ok else '存在错误'}",
+            (
+                f"- 问题：{counts.get('error', 0)} error / "
+                f"{counts.get('warning', 0)} warning / {counts.get('info', 0)} info"
+            ),
+            "",
+            "## 统计",
+            "",
+        ]
+        for key, value in self.stats.items():
+            lines.append(f"- {key}: {value}")
+        lines.extend(["", "## 发现", ""])
+        if not self.findings:
+            lines.append("未发现问题。")
+        else:
+            lines.extend(["| 级别 | 代码 | 位置 | 说明 |", "| --- | --- | --- | --- |"])
+            for finding in self.findings:
+                location = finding.path or ""
+                if finding.pointer:
+                    location = f"{location} {finding.pointer}".strip()
+                message = finding.message.replace("|", "\\|").replace("\n", " ")
+                lines.append(
+                    f"| {finding.severity} | `{finding.code}` | {location} | {message} |"
+                )
+        lines.append("")
+        return "\n".join(lines)
+
+
+def audit_agent(
+    path: str | Path, *, out: str | Path | None = None
+) -> tuple[AuditReport, list[Path]]:
+    """Audit an agent project and write JSON + Markdown reports."""
+
+    source = load_source(path)
+    result, definition = validate_source(source)
+    findings = [_from_diagnostic(diagnostic) for diagnostic in result.sorted()]
+    fingerprint: str | None = None
+    stats: dict = {}
+    if definition is not None:
+        stats = _stats(definition)
+        findings.extend(_heuristic_findings(definition))
+        try:
+            compiled = compile_agent(path)
+            fingerprint = compiled.fingerprint
+            stats["assets"] = len(compiled.assets)
+            stats["asset_bytes"] = sum(asset.size for asset in compiled.assets)
+        except Exception:  # noqa: BLE001, S110 - audit keeps validation findings
+            pass
+    root = definition.root if definition else source.root
+    report = AuditReport(
+        agent=definition.metadata.name if definition else "(unparsed)",
+        root=str(root),
+        fingerprint=fingerprint,
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        findings=tuple(findings),
+        stats=stats,
+    )
+    directory = Path(out) if out else root / "reports" / "audit"
+    directory.mkdir(parents=True, exist_ok=True)
+    json_path = directory / "audit.json"
+    markdown_path = directory / "audit.md"
+    json_path.write_text(
+        json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    markdown_path.write_text(report.to_markdown(), encoding="utf-8")
+    return report, [json_path, markdown_path]
+
+
+def _from_diagnostic(diagnostic: Diagnostic) -> AuditFinding:
+    return AuditFinding(
+        code=diagnostic.code,
+        severity=diagnostic.severity.value,
+        message=diagnostic.message,
+        path=diagnostic.path,
+        pointer=diagnostic.pointer,
+    )
+
+
+def _stats(definition: AgentDefinition) -> dict:
+    counts = definition.entity_counts()
+    knowledge_chars = sum(len(item.content) for item in definition.knowledge)
+    stats = {key: value for key, value in counts.items() if value}
+    stats["knowledge_chars"] = knowledge_chars
+    limits = definition.effective_limits()
+    stats["knowledge_budget_percent"] = round(
+        100 * knowledge_chars / max(1, limits["knowledge_chars"]), 1
+    )
+    return stats
+
+
+def _heuristic_findings(definition: AgentDefinition) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    findings.extend(_secret_findings(definition))
+    findings.extend(_tool_findings(definition))
+    findings.extend(_model_findings(definition))
+    findings.extend(_budget_findings(definition))
+    return findings
+
+
+def _secret_findings(definition: AgentDefinition) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    texts: list[tuple[str, str]] = []
+    if definition.instructions:
+        texts.append((definition.instructions.file or "AGENTS.md", definition.instructions.text))
+    for knowledge in definition.knowledge:
+        texts.append((knowledge.file, knowledge.content))
+    for skill in definition.skills:
+        texts.append((skill.file, skill.instructions))
+    for name, config in definition.mcp:
+        env = config.get("env") if isinstance(config, dict) else None
+        if isinstance(env, dict):
+            for key, value in env.items():
+                if isinstance(value, str):
+                    texts.append((f"mcp.json:{name}.env.{key}", value))
+        headers = config.get("headers") if isinstance(config, dict) else None
+        if isinstance(headers, dict):
+            for key, value in headers.items():
+                if isinstance(value, str):
+                    texts.append((f"mcp.json:{name}.headers.{key}", value))
+    for path, text in texts:
+        for pattern in _SECRET_PATTERNS:
+            if pattern.search(text):
+                findings.append(
+                    AuditFinding(
+                        "AUD001",
+                        "warning",
+                        f"{path} 中疑似包含明文密钥/令牌",
+                        path=path,
+                    )
+                )
+                break
+    return findings
+
+
+def _tool_findings(definition: AgentDefinition) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    for tool in definition.tools:
+        annotations = dict(tool.annotations)
+        risky = annotations.get("open_world") or annotations.get("destructive")
+        name = tool.metadata.name
+        if risky and not annotations.get("read_only"):
+            findings.append(
+                AuditFinding(
+                    "AUD002",
+                    "warning",
+                    f"工具 {name!r} 具有外部/破坏性副作用，建议确认审批策略",
+                    path=tool.file,
+                )
+            )
+        if any(word in name for word in _RISKY_TOOL_NAMES):
+            findings.append(
+                AuditFinding(
+                    "AUD003",
+                    "warning",
+                    f"工具 {name!r} 名称暗示可执行命令，请确认权限边界",
+                    path=tool.file,
+                )
+            )
+        if not annotations:
+            findings.append(
+                AuditFinding(
+                    "AUD004",
+                    "info",
+                    f"工具 {name!r} 未声明 annotations",
+                    path=tool.file,
+                )
+            )
+    return findings
+
+
+def _model_findings(definition: AgentDefinition) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    for model in definition.models:
+        endpoint = dict(model.endpoint)
+        base_url = endpoint.get("base_url", "")
+        if isinstance(base_url, str) and base_url.startswith("http://"):
+            findings.append(
+                AuditFinding(
+                    "AUD005",
+                    "warning",
+                    f"模型 {model.metadata.name!r} 使用明文 http:// 端点",
+                    path=model.file,
+                )
+            )
+        if model.model.startswith("your-") or model.model in {"latest", "TODO"}:
+            findings.append(
+                AuditFinding(
+                    "AUD006",
+                    "info",
+                    f"模型 {model.metadata.name!r} 仍是占位符 {model.model!r}",
+                    path=model.file,
+                )
+            )
+    return findings
+
+
+def _budget_findings(definition: AgentDefinition) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    limits = definition.effective_limits()
+    knowledge_chars = sum(len(item.content) for item in definition.knowledge)
+    if knowledge_chars > 0.8 * limits["knowledge_chars"]:
+        findings.append(
+            AuditFinding(
+                "AUD007",
+                "warning",
+                f"知识内容已使用 {knowledge_chars}/{limits['knowledge_chars']} 字符预算的 80% 以上",
+                path="knowledge/",
+            )
+        )
+    return findings
+
+
+__all__ = ["AuditFinding", "AuditReport", "audit_agent"]
