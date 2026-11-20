@@ -1,0 +1,11 @@
+# Keep repository text files LF on every platform so generated asset hashes and
+# golden snapshots stay stable between Windows and Linux checkouts.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.whl binary
