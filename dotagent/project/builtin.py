@@ -684,6 +684,43 @@ subagent instructions and workflows/tasks still need manual DSH configuration.
 """
 
 
+class CopilotProjector(Projector):
+    name = "copilot"
+    description = "GitHub Copilot custom instructions (.github/copilot-instructions.md)."
+
+    def project(self, compiled: CompiledAgent) -> ProjectionResult:
+        agent = compiled.definition
+        parts = [f"# {agent.metadata.title or agent.metadata.name}", ""]
+        if agent.metadata.description:
+            parts.extend([agent.metadata.description, ""])
+        if agent.instructions and agent.instructions.text.strip():
+            parts.extend([agent.instructions.text.strip(), ""])
+        if agent.knowledge:
+            parts.extend(["## Knowledge", ""])
+            for item in agent.knowledge:
+                parts.extend([f"### {item.metadata.name}", "", item.content, ""])
+        if agent.skills:
+            parts.extend(["## Skills", ""])
+            for skill in agent.skills:
+                parts.append(f"- `{skill.name}`: {skill.description}")
+            parts.append("")
+        if agent.tools:
+            parts.extend(["## Tools", ""])
+            for tool in agent.tools:
+                parts.append(
+                    f"- `{tool.metadata.name}`: {tool.metadata.description or ''}".rstrip()
+                )
+            parts.append("")
+        return ProjectionResult(
+            target=self.name,
+            files=(
+                ProjectedFile.text(
+                    ".github/copilot-instructions.md", "\n".join(parts).rstrip() + "\n"
+                ),
+            ),
+        )
+
+
 class OpenAIAgentsProjector(Projector):
     name = "openai"
     description = (

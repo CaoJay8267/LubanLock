@@ -15,6 +15,7 @@ stay reproducible.
 from __future__ import annotations
 
 import base64
+import os
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime, timedelta
@@ -29,6 +30,55 @@ SIGNATURE_FORMAT = "dotagent-signature/1"
 ALGORITHM = "ed25519"
 MAX_CRL_BYTES = 8 * 1024 * 1024
 MAX_OCSP_BYTES = 2 * 1024 * 1024
+DEFAULT_CACHE_MAX_AGE = 86_400
+
+
+def _cache_root() -> Path:
+    configured = os.environ.get("DOTAGENT_CACHE_DIR")
+    if configured:
+        return Path(configured) / "pki"
+    return Path.home() / ".cache" / "dotagent" / "pki"
+
+
+def _cached_bytes(
+    url: str,
+    *,
+    kind: str,
+    timeout: float,
+    max_age: float = DEFAULT_CACHE_MAX_AGE,
+    offline: bool = False,
+    proxy: str | None = None,
+    headers: dict[str, str] | None = None,
+    data: bytes | None = None,
+    max_bytes: int,
+) -> bytes:
+    key = sha256_bytes(url.encode("utf-8"))[:32]
+    path = _cache_root() / f"{kind}-{key}.bin"
+    if offline:
+        if path.is_file():
+            return path.read_bytes()
+        raise PackageError(f"offline cache miss for {url}")
+    if path.is_file() and datetime.now(UTC).timestamp() - path.stat().st_mtime <= max_age:
+        return path.read_bytes()
+    request = urllib.request.Request(
+        url, data=data, headers=headers or {}, method="POST" if data is not None else "GET"
+    )
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({"http": proxy, "https": proxy})
+    ) if proxy else urllib.request.build_opener()
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            payload = response.read(max_bytes + 1)
+    except urllib.error.URLError as exc:
+        raise PackageError(f"cannot fetch {url}: {exc.reason}") from exc
+    if len(payload) > max_bytes:
+        raise PackageError(f"{url} response exceeds the size limit")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    except OSError:
+        pass
+    return payload
 
 
 def _crypto():
@@ -89,6 +139,7 @@ def generate_certificate_chain(
     common_name: str = "DotAgent",
     root_days: int = 3650,
     leaf_days: int = 730,
+    crl_url: str | None = None,
 ) -> tuple[Path, Path, Path]:
     """Create a root CA + signing certificate.
 
@@ -166,8 +217,22 @@ def generate_certificate_chain(
             ),
             critical=True,
         )
-        .sign(root_key, None)
     )
+    if crl_url:
+        leaf_cert = leaf_cert.add_extension(
+            x509.CRLDistributionPoints(
+                [
+                    x509.DistributionPoint(
+                        full_name=[x509.UniformResourceIdentifier(crl_url)],
+                        relative_name=None,
+                        reasons=None,
+                        crl_issuer=None,
+                    )
+                ]
+            ),
+            critical=False,
+        )
+    leaf_cert = leaf_cert.sign(root_key, None)
     files = {
         "root-key.pem": root_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -333,6 +398,9 @@ def verify_manifest(
     ocsp: bool = False,
     ocsp_url: str | None = None,
     timeout: float = 10.0,
+    offline: bool = False,
+    cache_max_age: float = DEFAULT_CACHE_MAX_AGE,
+    proxy: str | None = None,
 ) -> None:
     """Raise :class:`PackageError` when the signature does not verify."""
 
@@ -367,6 +435,9 @@ def verify_manifest(
             ocsp=ocsp,
             ocsp_url=ocsp_url,
             timeout=timeout,
+            offline=offline,
+            cache_max_age=cache_max_age,
+            proxy=proxy,
         )
         public_key = leaf.public_key()
     else:
@@ -430,6 +501,9 @@ def _check_revocations(
     *,
     fetch: bool = False,
     timeout: float = 10.0,
+    offline: bool = False,
+    cache_max_age: float = DEFAULT_CACHE_MAX_AGE,
+    proxy: str | None = None,
 ) -> None:
     now = datetime.now(UTC)
     all_certificates = [*chain, *anchors]
@@ -438,7 +512,15 @@ def _check_revocations(
         data = Path(path).read_bytes()
         crls.append(_parse_crl(data, str(path)))
     if fetch:
-        crls.extend(_fetch_crls(chain[0], timeout=timeout))
+        crls.extend(
+            _fetch_crls(
+                chain[0],
+                timeout=timeout,
+                offline=offline,
+                cache_max_age=cache_max_age,
+                proxy=proxy,
+            )
+        )
     leaf = chain[0]
     covered = False
     for crl in crls:
@@ -488,7 +570,14 @@ def _parse_crl(data: bytes, label: str):
             raise PackageError(f"cannot load CRL {label}: {exc}") from exc
 
 
-def _fetch_crls(certificate, *, timeout: float) -> list:
+def _fetch_crls(
+    certificate,
+    *,
+    timeout: float,
+    offline: bool = False,
+    cache_max_age: float = DEFAULT_CACHE_MAX_AGE,
+    proxy: str | None = None,
+) -> list:
     crypto = _crypto()
     x509 = crypto["x509"]
     try:
@@ -503,20 +592,32 @@ def _fetch_crls(certificate, *, timeout: float) -> list:
             url = getattr(name, "value", None)
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                 continue
-            try:
-                with urllib.request.urlopen(url, timeout=timeout) as response:
-                    data = response.read(MAX_CRL_BYTES + 1)
-            except urllib.error.URLError as exc:
-                raise PackageError(f"cannot fetch CRL {url}: {exc.reason}") from exc
-            if len(data) > MAX_CRL_BYTES:
-                raise PackageError(f"CRL {url} exceeds the size limit")
+            data = _cached_bytes(
+                url,
+                kind="crl",
+                timeout=timeout,
+                max_age=cache_max_age,
+                offline=offline,
+                proxy=proxy,
+                max_bytes=MAX_CRL_BYTES,
+            )
             crls.append(_parse_crl(data, url))
     if not crls:
         raise PackageError("certificate CRL distribution points contain no HTTP URL")
     return crls
 
 
-def _check_ocsp(leaf, chain: list, anchors: list, *, url: str | None, timeout: float) -> None:
+def _check_ocsp(
+    leaf,
+    chain: list,
+    anchors: list,
+    *,
+    url: str | None,
+    timeout: float,
+    offline: bool = False,
+    cache_max_age: float = DEFAULT_CACHE_MAX_AGE,
+    proxy: str | None = None,
+) -> None:
     crypto = _crypto()
     x509 = crypto["x509"]
     ocsp = crypto["ocsp"]
@@ -547,19 +648,17 @@ def _check_ocsp(leaf, chain: list, anchors: list, *, url: str | None, timeout: f
         .build()
     )
     body = request.public_bytes(serialization.Encoding.DER)
-    http_request = urllib.request.Request(
+    payload = _cached_bytes(
         url,
-        data=body,
+        kind="ocsp",
+        timeout=timeout,
+        max_age=cache_max_age,
+        offline=offline,
+        proxy=proxy,
         headers={"Content-Type": "application/ocsp-request"},
-        method="POST",
+        data=body,
+        max_bytes=MAX_OCSP_BYTES,
     )
-    try:
-        with urllib.request.urlopen(http_request, timeout=timeout) as response:
-            payload = response.read(MAX_OCSP_BYTES + 1)
-    except urllib.error.URLError as exc:
-        raise PackageError(f"cannot reach OCSP responder {url}: {exc.reason}") from exc
-    if len(payload) > MAX_OCSP_BYTES:
-        raise PackageError("OCSP response exceeds the size limit")
     try:
         parsed = ocsp.load_der_ocsp_response(payload)
     except ValueError as exc:
@@ -599,6 +698,9 @@ def _validate_chain(
     ocsp: bool = False,
     ocsp_url: str | None = None,
     timeout: float = 10.0,
+    offline: bool = False,
+    cache_max_age: float = DEFAULT_CACHE_MAX_AGE,
+    proxy: str | None = None,
 ) -> None:
     crypto = _crypto()
     x509 = crypto["x509"]
@@ -615,10 +717,26 @@ def _validate_chain(
             raise PackageError(f"certificate is not valid now (chain index {index})")
     if crl_paths or fetch_crl:
         _check_revocations(
-            chain, anchors, crl_paths, fetch=fetch_crl, timeout=timeout
+            chain,
+            anchors,
+            crl_paths,
+            fetch=fetch_crl,
+            timeout=timeout,
+            offline=offline,
+            cache_max_age=cache_max_age,
+            proxy=proxy,
         )
     if ocsp:
-        _check_ocsp(leaf, chain, anchors, url=ocsp_url, timeout=timeout)
+        _check_ocsp(
+            leaf,
+            chain,
+            anchors,
+            url=ocsp_url,
+            timeout=timeout,
+            offline=offline,
+            cache_max_age=cache_max_age,
+            proxy=proxy,
+        )
     if any(
         isinstance(extension.value, x509.BasicConstraints) and extension.value.ca
         for extension in leaf.extensions
@@ -703,16 +821,39 @@ def verify_timestamp(
         raise PackageError(
             "RFC 3161 timestamps require the optional 'rfc3161ng' dependency"
         ) from exc
-    certificate: bytes = b""
+    certificate: bytes | None = None
     if tsa_cert is not None:
         certificate = Path(tsa_cert).read_bytes()
     try:
-        rfc3161ng.check_timestamp(
-            token,
-            certificate=certificate,
-            data=data,
-            hashname="sha256",
+        if certificate is not None:
+            rfc3161ng.check_timestamp(
+                token,
+                certificate=certificate,
+                data=data,
+                hashname="sha256",
+            )
+            return
+        from pyasn1.codec.der import decoder, encoder
+
+        tst, _ = decoder.decode(token, asn1Spec=rfc3161ng.TimeStampToken())
+        errors: list[str] = []
+        for choice in tst.content["certificates"]:
+            try:
+                rfc3161ng.check_timestamp(
+                    token,
+                    certificate=encoder.encode(choice),
+                    data=data,
+                    hashname="sha256",
+                )
+                return
+            except Exception as exc:  # noqa: BLE001 - try the next chain cert
+                errors.append(str(exc))
+        raise PackageError(
+            "timestamp verification failed for every embedded certificate: "
+            + "; ".join(errors[-3:])
         )
+    except PackageError:
+        raise
     except Exception as exc:
         raise PackageError(f"timestamp verification failed: {exc}") from exc
 

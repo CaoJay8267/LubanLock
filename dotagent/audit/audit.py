@@ -131,7 +131,11 @@ def audit_agent(
     if definition is not None:
         stats = _stats(definition)
         findings.extend(_heuristic_findings(definition, config))
-        findings.extend(run_custom_rules(definition, config))
+        findings.extend(
+            run_custom_rules(
+                definition, config, {finding.code for finding in findings}
+            )
+        )
         try:
             compiled = compile_agent(path)
             fingerprint = compiled.fingerprint

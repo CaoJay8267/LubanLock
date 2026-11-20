@@ -52,6 +52,7 @@ ignore_paths: ['knowledge/private/*']
 
 - `rules` 可以开关任意 code（包括 `DTA*` 与 `AUD*`），并覆盖 severity、category；
 - `parameters` 传给插件规则，按规则的 `parameter_schema` 校验；
+- `depends_on` 定义依赖，依赖未触发时跳过；循环依赖产生 warning；
 - 报告按 category 汇总；
 - `secret_patterns` 追加到内置密钥正则；
 - `risky_tool_names` 覆盖默认的命令类工具名；

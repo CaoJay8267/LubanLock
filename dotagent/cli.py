@@ -29,9 +29,11 @@ from dotagent.integrations import (
     ImportReport,
     OpenAIImportReport,
     import_claude,
+    import_copilot,
     import_dsh,
     import_openai,
     import_package,
+    looks_like_copilot,
     looks_like_dsh,
     looks_like_openai,
 )
@@ -139,6 +141,9 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--fetch-crl", action="store_true", help="fetch CRL distribution points")
     verify.add_argument("--ocsp", action="store_true", help="check OCSP")
     verify.add_argument("--ocsp-url", help="override the certificate OCSP URL")
+    verify.add_argument("--offline", action="store_true", help="use the PKI cache only")
+    verify.add_argument("--cache-max-age", type=float, default=86400.0)
+    verify.add_argument("--proxy", help="HTTP(S) proxy for CRL/OCSP")
     verify.add_argument("--timestamp-cert", help="TSA certificate for RFC 3161")
     verify.add_argument("--require-timestamp", action="store_true")
     verify.add_argument("--require-signature", action="store_true")
@@ -168,7 +173,7 @@ def _parser() -> argparse.ArgumentParser:
     import_cmd.add_argument(
         "--from",
         dest="from_",
-        choices=("auto", "claude", "package", "dsh", "openai"),
+        choices=("auto", "claude", "package", "dsh", "openai", "copilot"),
         default="auto",
     )
     import_cmd.add_argument("--out")
@@ -458,6 +463,9 @@ def cmd_verify(args) -> int:
         fetch_crl=args.fetch_crl,
         ocsp=args.ocsp,
         ocsp_url=args.ocsp_url,
+        offline=args.offline,
+        cache_max_age=args.cache_max_age,
+        proxy=args.proxy,
         timestamp_cert=args.timestamp_cert,
         require_timestamp=args.require_timestamp,
         require_signature=args.require_signature,
@@ -574,17 +582,21 @@ def cmd_import(args) -> int:
     mode = args.from_
     if mode == "auto":
         if source.is_file():
-            if looks_like_openai(source):
+            if looks_like_copilot(source):
+                mode = "copilot"
+            elif looks_like_openai(source):
                 mode = "openai"
             elif source.suffix.lower() == ".zip":
                 mode = "package"
             else:
                 raise UsageError(
                     f"cannot detect the import format of {source}; use --from "
-                    "claude|package|dsh|openai"
+                    "claude|package|dsh|openai|copilot"
                 )
         elif (source / "agent.json").is_file():
             mode = "package"
+        elif (source / ".github" / "copilot-instructions.md").is_file():
+            mode = "copilot"
         elif (source / ".claude").exists() or (source / "CLAUDE.md").is_file():
             mode = "claude"
         elif looks_like_dsh(source):
@@ -594,11 +606,19 @@ def cmd_import(args) -> int:
         else:
             raise UsageError(
                 f"cannot detect the import format of {source}; use --from "
-                "claude|package|dsh|openai"
+                "claude|package|dsh|openai|copilot"
             )
     report: ImportReport | DshImportReport | OpenAIImportReport
     if mode == "claude":
         report = import_claude(
+            source,
+            out=args.out,
+            name=args.name,
+            force=args.force,
+            resource_root=args.resource,
+        )
+    elif mode == "copilot":
+        report = import_copilot(
             source,
             out=args.out,
             name=args.name,

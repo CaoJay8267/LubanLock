@@ -23,6 +23,7 @@ class RuleSetting:
     severity: str | None = None
     category: str | None = None
     parameters: dict = field(default_factory=dict)
+    depends_on: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,10 @@ class AuditConfig:
         setting = self.rules.get(code)
         return dict(setting.parameters) if setting is not None else {}
 
+    def depends_on(self, code: str) -> tuple[str, ...]:
+        setting = self.rules.get(code)
+        return setting.depends_on if setting is not None else ()
+
     def ignored(self, path: str | None) -> bool:
         if not path:
             return False
@@ -82,11 +87,13 @@ def load_audit_config(spec_dir: str | Path) -> tuple[AuditConfig, list[Diagnosti
         severity = value.get("severity")
         category = value.get("category")
         parameters = value.get("parameters")
+        depends_on = value.get("depends_on")
         rules[str(code)] = RuleSetting(
             enabled=bool(value.get("enabled", True)),
             severity=severity if severity in _SEVERITIES else None,
             category=str(category) if isinstance(category, str) and category else None,
             parameters=parameters if isinstance(parameters, dict) else {},
+            depends_on=tuple(str(item) for item in depends_on or ()),
         )
     patterns = tuple(str(item) for item in document.get("secret_patterns") or ())
     for pattern in patterns:

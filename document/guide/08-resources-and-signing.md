@@ -70,6 +70,7 @@ dotagent verify dist/research-agent-0.1.0.zip \
 - `--ocsp` 检查 OCSP，`--ocsp-url` 可覆盖证书中的 responder URL；
 - `--timestamp-cert` 验证 RFC 3161 时间戳；获取时间戳用
   `dotagent package ... --timestamp-url URL`（需要 `dotagent[timestamp]`）；
+- `--offline` 只读 PKI 缓存；`--proxy` 为 CRL/OCSP 指定代理；
 - 时间戳会破坏签名包的可复现性；
 - 证书链仅支持 Ed25519。
 

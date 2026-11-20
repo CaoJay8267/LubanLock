@@ -7,6 +7,7 @@ from dotagent.build.compiler import CompiledAgent
 from .base import ProjectedFile, ProjectionResult, Projector
 from .builtin import (
     ClaudeProjector,
+    CopilotProjector,
     DshProjector,
     JsonProjector,
     MarkdownProjector,
@@ -18,6 +19,7 @@ from .registry import get_projector, list_projectors, register
 register(JsonProjector())
 register(MarkdownProjector())
 register(ClaudeProjector())
+register(CopilotProjector())
 register(DshProjector())
 register(OpenAIAgentsProjector())
 register(OpenAIChatProjector())

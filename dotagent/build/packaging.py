@@ -168,6 +168,9 @@ def verify_package(
     ocsp: bool = False,
     ocsp_url: str | None = None,
     timeout: float = 10.0,
+    offline: bool = False,
+    cache_max_age: float = 86_400,
+    proxy: str | None = None,
     timestamp_cert: str | Path | None = None,
     require_timestamp: bool = False,
     require_signature: bool = False,
@@ -230,6 +233,9 @@ def verify_package(
                         ocsp=ocsp,
                         ocsp_url=ocsp_url,
                         timeout=timeout,
+                        offline=offline,
+                        cache_max_age=cache_max_age,
+                        proxy=proxy,
                     )
                 except (PackageError, KeyError) as exc:
                     errors.append(str(exc))

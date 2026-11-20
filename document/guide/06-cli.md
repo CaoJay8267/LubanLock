@@ -94,6 +94,7 @@ dotagent package my-agent --sign-key ./keys/signing-key.pem \
   --sign-cert ./keys/signing.pem --verify
 dotagent verify ./dist/research-agent-0.1.0.zip \
   --ca-cert ./keys/root-ca.pem --fetch-crl --ocsp \
+  --offline --proxy http://127.0.0.1:8080 \
   --timestamp-cert ./keys/tsa.pem --require-signature
 ```
 
@@ -132,6 +133,7 @@ dotagent visualize my-agent --out ./reports/visual
 dotagent import ./claude-project --from claude
 dotagent import ./dsh-preset --from dsh
 dotagent import ./openai --from openai
+dotagent import ./copilot-project --from copilot
 dotagent import ./dist/agent.zip --from package --out resource/agent/restored
 ```
 

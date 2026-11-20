@@ -1,4 +1,4 @@
-# DotAgent 架构与决策记录（v0.5.0）
+# DotAgent 架构与决策记录（v0.6.0）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
 > `dotagent/` 源码与 `tests/` 为准。
@@ -375,26 +375,43 @@ skills: [citation-format]
   `libraries/<name>/...` 命名空间进入编译产物；
 - 版本读取被引用工程的 `metadata.version`，支持 `>= <= > < == != ~= ^`；
 - 名称冲突报 `DTA333`；版本不匹配报 `DTA331`；无效约束报 `DTA332`；
-- 锁文件记录外部库文件哈希；含共享库的工程禁用增量快速路径，`--locked` 仍可检测变化。
+- 锁文件记录外部库文件哈希；含共享库的工程禁用增量快速路径，`--locked` 仍可检测变化；
+- 二进制技能资产可打包，并由 `import package` 还原为本地 `.agents/skills/`。
 
-## 6. v0.5 验证记录
+### 5.8 PKI 测试与缓存
 
-- 单元测试：`python -m unittest discover -s tests -t tests`（137 个用例，全部通过）；
-- 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过（47 个源文件）；
+- 本地 HTTP 服务提供真实 CRL 分发点测试；
+- 仓库内保存一份真实 TSA token（DigiCert）作为 RFC 3161 验签 fixture；
+- CRL/OCSP 响应缓存到 `~/.cache/dotagent/pki`（`DOTAGENT_CACHE_DIR` 可覆盖）；
+- `--offline` 只读缓存；`--proxy` 使用 HTTP(S) 代理；超时可配置。
+
+### 5.9 GitHub Copilot
+
+`copilot` 目标生成 `.github/copilot-instructions.md`；导入器识别该文件并重建
+`AGENTS.md` + `.agents/agent.yaml`。
+
+### 5.10 审计依赖
+
+`rules.<CODE>.depends_on` 形成依赖图；拓扑排序执行，被依赖规则未触发时跳过。
+循环依赖产生 warning，不阻塞其他规则。
+
+## 6. v0.6 验证记录
+
+- 单元测试：`python -m unittest discover -s tests -t tests`（142 个用例，全部通过）；
+- 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过（48 个源文件）；
 - 示例通过 validate、15 项测试、determinism、package、audit、visualize；
-- 证书链：root 签名、轮换、CRL、CRL 分发点获取、OCSP 吊销、时间戳接线通过；
+- 证书：真实 RFC 3161 token、真实 CRL 分发点、OCSP、离线缓存通过；
 - MCP：stdio/HTTP/旧版 SSE/WebSocket 发现、schema 导入与缓存通过；
-- DSH/OpenAI：技能/MCP 映射、复杂 schema `FunctionTool`、handoff 与语法通过；
-- 共享库：工具/模型/技能/知识资产、锁文件外部哈希、版本约束与冲突通过；
-- 缓存：touch 不变内容仍可复用，内容变化触发重建。
+- DSH/OpenAI/Copilot：映射、复杂 schema、handoff、投影/导入通过；
+- 共享库：技能/知识/二进制资产、锁文件外部哈希、包导入往返通过；
+- 审计：分类、参数 schema、依赖跳过通过。
 
 ## 7. 后续候选（非阻断）
 
 1. DSH 子 Agent 指令与工作流/任务的自动转换（需要 DSH 侧定义格式）。
-2. TSA/OCSP 的代理、超时与离线响应缓存。
-3. 共享库中带资产的二进制文件与包导入往返。
-4. 审计规则的跨规则依赖与可视化分组。
-5. 更多投影目标与导入器，先核对官方格式。
+2. OCSP/TSA 的离线响应签名策略与缓存加密。
+3. 更多 harness 投影/导入，先核对官方格式。
+4. 审计规则的跨规则条件表达式与可视化依赖图。
 
 ## 8. v0.2 基线记录
 
@@ -466,13 +483,14 @@ my-host = "my_package:MyHostAdapter"
 - 工作流无条件边/数据映射/重试/循环；这些属于宿主执行语义。
 - 知识按原样注入，无检索/分块/token 精确计数。
 - 投影不清理旧文件；重复投影建议空目录。
-- 证书链支持签名、轮换、CRL、CRL DP 与 OCSP；RFC 3161 时间戳为可选依赖，TSA/OCSP 无离线缓存。
+- 证书链支持签名、轮换、CRL、CRL DP、OCSP 与 RFC 3161；离线缓存不加密。
 - JSON Schema 子集不含 `unevaluatedProperties`、`$dynamicRef`、`contentEncoding` 等。
-- 审计规则可分类、可带参数 schema，但没有跨规则依赖。
+- 审计规则可分类、带参数 schema、依赖图，但没有条件表达式/可视化依赖图。
 - DSH 映射工具/技能/MCP manager/子 Agent 插件；子 Agent 指令与工作流/任务仍需手动配置。
 - OpenAI 复杂 schema 使用 `FunctionTool`，直接子 Agent 生成 `handoffs`；嵌套子 Agent 被扁平化。
 - `openai` 导入只处理字面量 `Agent(...)` 与 `openai-chat.json`，不执行/不推导任意 Python。
 - MCP 支持 stdio/HTTP/旧版 SSE/WebSocket；SSE/WS 的异常恢复与代理支持有限。
+- Copilot 导入只读取 `.github/copilot-instructions.md`，不解析路径级 instructions 文件。
 - 旧布局 `.agent/` 与 `subagents/` 仍可读，但仅作为兼容路径。
 
 ## 13. 旧版验证记录（v0.2）

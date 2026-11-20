@@ -65,14 +65,48 @@ def audit_rules() -> dict[str, AuditRule]:
 
 
 def run_custom_rules(
-    definition: AgentDefinition, config: AuditConfig
+    definition: AgentDefinition,
+    config: AuditConfig,
+    existing_codes: set[str] | None = None,
 ) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
-    for rule in audit_rules().values():
-        if not config.enabled(rule.code):
+    rules = audit_rules()
+    triggered = set(existing_codes or ())
+    pending = set(rules)
+    ordered: list[str] = []
+    while pending:
+        ready = sorted(
+            code
+            for code in pending
+            if all(
+                dependency in ordered
+                or dependency in triggered
+                or dependency not in rules
+                for dependency in config.depends_on(code)
+            )
+        )
+        if not ready:
+            for code in sorted(pending):
+                findings.append(
+                    AuditFinding(
+                        code,
+                        "warning",
+                        f"audit rule {code} has a dependency cycle",
+                    )
+                )
+            break
+        for code in ready:
+            pending.remove(code)
+            ordered.append(code)
+    for code in ordered:
+        rule = rules[code]
+        if not config.enabled(code):
+            continue
+        dependencies = config.depends_on(code)
+        if any(dependency not in triggered for dependency in dependencies):
             continue
         try:
-            parameters = config.parameters(rule.code)
+            parameters = config.parameters(code)
             if rule.parameter_schema:
                 store = get_schema_store()
                 parameter_diagnostics = validate_instance(
@@ -84,7 +118,7 @@ def run_custom_rules(
                 if any(d.severity.value == "error" for d in parameter_diagnostics):
                     findings.append(
                         AuditFinding(
-                            rule.code,
+                            code,
                             "warning",
                             "invalid audit rule parameters: "
                             + "; ".join(d.message for d in parameter_diagnostics),
@@ -92,13 +126,15 @@ def run_custom_rules(
                         )
                     )
                     continue
-            findings.extend(rule.run(definition, config))
+            rule_findings = rule.run(definition, config)
+            findings.extend(rule_findings)
+            triggered.update(finding.code for finding in rule_findings)
         except Exception as exc:  # noqa: BLE001 - a broken plugin must not crash audit
             findings.append(
                 AuditFinding(
-                    rule.code,
+                    code,
                     "warning",
-                    f"audit rule {rule.code} failed: {exc}",
+                    f"audit rule {code} failed: {exc}",
                 )
             )
     return findings

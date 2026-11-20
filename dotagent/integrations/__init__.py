@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .claude import ImportReport, import_claude, import_package
+from .copilot import import_copilot, looks_like_copilot
 from .dsh import DshImportReport, import_dsh, looks_like_dsh
 from .mcp_client import (
     McpDiscovery,
@@ -22,10 +23,12 @@ __all__ = [
     "discover_agent",
     "discover_server",
     "import_claude",
+    "import_copilot",
     "import_dsh",
     "import_openai",
     "import_package",
     "import_tools",
+    "looks_like_copilot",
     "looks_like_dsh",
     "looks_like_openai",
 ]

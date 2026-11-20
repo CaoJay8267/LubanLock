@@ -4,6 +4,21 @@ All notable changes to DotAgent are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.0 — 2026-11-20
+
+### Added
+
+- Real RFC 3161 token verification fixture and local CRL distribution-point test.
+- PKI response cache with `--offline`, `--cache-max-age` and `--proxy`.
+- Shared-library binary assets round-trip through package import.
+- Audit rule `depends_on` graph with topological execution.
+- GitHub Copilot projector and importer.
+
+### Changed
+
+- RFC 3161 verification now tries the token's embedded certificate chain.
+- `dotagent import --from` accepts `copilot`.
+
 ## 0.5.0 — 2026-11-20
 
 ### Added

@@ -28,6 +28,14 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 - **符合开放标准**：技能严格遵循 [Agent Skills](https://agentskills.io/specification)；
   指令使用 [AGENTS.md](https://agents.md/) 开放格式。
 
+## v0.6 新增
+
+- 真实 RFC 3161 token 校验与本地 CRL 分发点集成测试
+- OCSP/CRL 代理、超时与离线缓存（`--offline`、`--proxy`）
+- 共享库二进制资产与包导入往返
+- 审计规则依赖图（`depends_on`）
+- GitHub Copilot 投影与导入
+
 ## v0.5 新增
 
 - 共享库现在导入工具、模型、技能与知识，并把外部文件纳入锁
@@ -77,7 +85,7 @@ dotagent --version
 
 ```bash
 python -m pip wheel . --no-deps -w dist
-python -m pip install dist/dotagent-0.5.0-py3-none-any.whl
+python -m pip install dist/dotagent-0.6.0-py3-none-any.whl
 dotagent --version
 ```
 
@@ -301,7 +309,7 @@ spec:
 | `dotagent audit [PATH] [--fail-on error\|warning\|never]` | 静态审计，读 `.agents/audit.yaml` |
 | `dotagent visualize [PATH]` | Mermaid/HTML，写 `reports/visual/` |
 | `dotagent mcp discover [PATH] [--server NAME] [--write] [--refresh] [--max-age SEC]` | 连接 MCP server 导入工具 schema，带缓存 |
-| `dotagent import SOURCE [--from claude\|package\|dsh\|openai] [--out DIR]` | 从 Claude Code、DSH、OpenAI 或包反向导入 |
+| `dotagent import SOURCE [--from claude\|package\|dsh\|openai\|copilot] [--out DIR]` | 从 Claude Code、DSH、OpenAI、Copilot 或包反向导入 |
 | `dotagent skill add NAME --agent PATH` | 添加合规技能 |
 | `dotagent reset [PATH] --yes [--build]` | 清理生成物并可选重建 |
 | `dotagent deploy [PATH] [--target NAME] [--sign-key FILE]` | 打包 + 投影到 `dist/` |
@@ -323,6 +331,7 @@ spec:
 | `dsh` | DeepSeek Harness 预设 bundle（`package.json` + `cordis.patch.yml`）；persona + 已知工具插件 |
 | `openai` | OpenAI Agents SDK 脚手架（`agent.py` + `tools.py` + `tools.json`） |
 | `openai-chat` | Chat Completions 请求骨架（model + messages + tools） |
+| `copilot` | GitHub Copilot `.github/copilot-instructions.md` |
 
 DSH 会映射已知工具名、技能文件系统、MCP manager 与子 Agent 插件；子 Agent 的
 具体指令与工作流/任务仍需手动配置。OpenAI 为简单 schema 生成 `@function_tool`，
@@ -358,6 +367,7 @@ signature.json   # 仅签名时存在
 - `verify --crl revoked.crl` 检查吊销列表（PEM/DER）；
 - `verify --fetch-crl` 从证书 CRL 分发点自动获取；
 - `verify --ocsp [--ocsp-url URL]` 检查 OCSP；
+- `verify --offline` 只读 PKI 缓存，`--proxy URL` 为 CRL/OCSP 指定代理；
 - `package --timestamp-url URL` 获取 RFC 3161 时间戳，`verify --timestamp-cert` 验证。
 - `keygen --chain` 生成 root CA + 叶证书；`keygen --rotate` 在同一个 root 下签发新叶证书，
   实现密钥轮换（旧包和新包都可用同一 trust anchor 验证）。
@@ -374,6 +384,7 @@ kind: AuditConfig
 rules:
   AUD001: {enabled: false}
   AUD006: {severity: error}
+  AUD900: {depends_on: [AUD006]}
 secret_patterns: ['TOKEN-[0-9]+']
 risky_tool_names: [bash, shell]
 budget_warning_ratio: 0.8

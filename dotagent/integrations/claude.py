@@ -441,7 +441,17 @@ def _write_skill(spec_dir: Path, item: dict, files: dict[str, bytes], written: l
         source = files.get(f"assets/{asset}")
         if source is None:
             continue
-        relative = Path(str(asset)).relative_to(Path(f"skills/{name}"))
+        asset_path = Path(str(asset))
+        parts = asset_path.parts
+        if (
+            len(parts) >= 5
+            and parts[0] == "libraries"
+            and parts[2] == "skills"
+            and parts[3] == name
+        ):
+            relative = Path(*parts[4:])
+        else:
+            relative = asset_path.relative_to(Path(f"skills/{name}"))
         target = directory / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(source)
