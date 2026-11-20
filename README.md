@@ -28,6 +28,12 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 - **符合开放标准**：技能严格遵循 [Agent Skills](https://agentskills.io/specification)；
   指令使用 [AGENTS.md](https://agents.md/) 开放格式。
 
+## v0.7 新增
+
+- RFC 3161 请求支持显式 `--timestamp-proxy`，不再依赖环境变量
+- PKI 缓存目录/文件权限收紧（0700/0600，尽力而为）
+- Copilot 路径级 `*.instructions.md` 投影与导入
+
 ## v0.6 新增
 
 - 真实 RFC 3161 token 校验与本地 CRL 分发点集成测试
@@ -85,7 +91,7 @@ dotagent --version
 
 ```bash
 python -m pip wheel . --no-deps -w dist
-python -m pip install dist/dotagent-0.6.0-py3-none-any.whl
+python -m pip install dist/dotagent-0.7.0-py3-none-any.whl
 dotagent --version
 ```
 
@@ -331,7 +337,7 @@ spec:
 | `dsh` | DeepSeek Harness 预设 bundle（`package.json` + `cordis.patch.yml`）；persona + 已知工具插件 |
 | `openai` | OpenAI Agents SDK 脚手架（`agent.py` + `tools.py` + `tools.json`） |
 | `openai-chat` | Chat Completions 请求骨架（model + messages + tools） |
-| `copilot` | GitHub Copilot `.github/copilot-instructions.md` |
+| `copilot` | GitHub Copilot `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` |
 
 DSH 会映射已知工具名、技能文件系统、MCP manager 与子 Agent 插件；子 Agent 的
 具体指令与工作流/任务仍需手动配置。OpenAI 为简单 schema 生成 `@function_tool`，
@@ -368,7 +374,7 @@ signature.json   # 仅签名时存在
 - `verify --fetch-crl` 从证书 CRL 分发点自动获取；
 - `verify --ocsp [--ocsp-url URL]` 检查 OCSP；
 - `verify --offline` 只读 PKI 缓存，`--proxy URL` 为 CRL/OCSP 指定代理；
-- `package --timestamp-url URL` 获取 RFC 3161 时间戳，`verify --timestamp-cert` 验证。
+- `package --timestamp-url URL [--timestamp-proxy URL]` 获取 RFC 3161 时间戳，`verify --timestamp-cert` 验证。
 - `keygen --chain` 生成 root CA + 叶证书；`keygen --rotate` 在同一个 root 下签发新叶证书，
   实现密钥轮换（旧包和新包都可用同一 trust anchor 验证）。
 - 默认仍无签名，未签名包保持可复现；证书链仅支持 Ed25519。

@@ -91,7 +91,8 @@ dotagent keygen --out ./keys2 --rotate \
   --root-key ./keys/root-key.pem --root-cert ./keys/root-ca.pem
 
 dotagent package my-agent --sign-key ./keys/signing-key.pem \
-  --sign-cert ./keys/signing.pem --verify
+  --sign-cert ./keys/signing.pem \
+  --timestamp-url https://tsa.example/tsr --timestamp-proxy http://127.0.0.1:8080 --verify
 dotagent verify ./dist/research-agent-0.1.0.zip \
   --ca-cert ./keys/root-ca.pem --fetch-crl --ocsp \
   --offline --proxy http://127.0.0.1:8080 \

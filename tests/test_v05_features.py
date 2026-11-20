@@ -1,5 +1,6 @@
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from typing import ClassVar
@@ -198,14 +199,19 @@ class CopilotTests(unittest.TestCase):
             text = result.file_map()[".github/copilot-instructions.md"].decode()
             self.assertIn("test-agent", text)
             source = base / "copilot"
-            (source / ".github").mkdir(parents=True)
+            (source / ".github" / "instructions").mkdir(parents=True)
             (source / ".github" / "copilot-instructions.md").write_text(
                 "# Instructions\n\nBe concise.\n", encoding="utf-8"
+            )
+            (source / ".github" / "instructions" / "python.instructions.md").write_text(
+                '---\napplyTo: "**/*.py"\n---\n\nUse type hints.\n',
+                encoding="utf-8",
             )
             report = import_copilot(source, out=base / "restored")
             result, definition = validate_source(load_source(report.out))
             self.assertTrue(result.ok, [d.format() for d in result.diagnostics])
             self.assertIn("Be concise", definition.instructions.text)
+            self.assertIn("python", [item.metadata.name for item in definition.knowledge])
 
 
 class SharedAssetPackageTests(unittest.TestCase):
@@ -246,6 +252,53 @@ class SharedAssetPackageTests(unittest.TestCase):
 
 
 class CertFetchTests(unittest.TestCase):
+    def test_timestamp_request_and_proxy(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        import rfc3161ng
+        from pyasn1.codec.der import decoder, encoder
+
+        from dotagent.build.signing import request_timestamp, verify_timestamp
+
+        token = (Path(__file__).parent / "fixtures" / "digicert.tsr").read_bytes()
+        tst, _ = decoder.decode(token, asn1Spec=rfc3161ng.TimeStampToken())
+        response = rfc3161ng.TimeStampResp()
+        response["status"]["status"] = 0
+        response["timeStampToken"] = tst
+        payload = encoder.encode(response)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/timestamp-reply")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_port}/tsa"
+            token_response = request_timestamp(
+                b"dotagent timestamp fixture", url, timeout=5
+            )
+            verify_timestamp(b"dotagent timestamp fixture", token_response)
+            proxied = request_timestamp(
+                b"dotagent timestamp fixture",
+                url,
+                timeout=5,
+                proxy=url,
+            )
+            self.assertTrue(proxied)
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_real_crl_distribution_point(self):
         import threading
         from datetime import UTC, datetime, timedelta

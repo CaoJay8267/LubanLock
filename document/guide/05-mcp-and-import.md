@@ -113,7 +113,7 @@ dotagent import ./my-dsh-preset --from dsh
 # OpenAI：openai-chat.json，或生成的 agent.py + tools.json（AST 解析，不执行代码）
 dotagent import ./openai --from openai
 
-# Copilot：.github/copilot-instructions.md
+# Copilot：.github/copilot-instructions.md 与 .github/instructions/*.instructions.md
 dotagent import ./repo --from copilot
 ```
 

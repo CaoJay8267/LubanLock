@@ -4,6 +4,14 @@ All notable changes to DotAgent are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/).
 
+## 0.7.0 — 2026-11-20
+
+### Added
+
+- Explicit `--timestamp-proxy` for RFC 3161 requests.
+- Copilot path-level instructions projection/import.
+- Best-effort `0700`/`0600` permissions for the PKI cache.
+
 ## 0.6.0 — 2026-11-20
 
 ### Added

@@ -80,6 +80,7 @@ def package_agent(
     sign_chain: tuple[str | Path, ...] = (),
     timestamp_url: str | None = None,
     timestamp_timeout: float = 30.0,
+    timestamp_proxy: str | None = None,
 ) -> Path:
     """Write *compiled* as a reproducible package and return its path."""
 
@@ -112,7 +113,10 @@ def package_agent(
         ).encode("utf-8")
     if timestamp_url is not None:
         files[TIMESTAMP_NAME] = request_timestamp(
-            manifest_bytes, timestamp_url, timeout=timestamp_timeout
+            manifest_bytes,
+            timestamp_url,
+            timeout=timestamp_timeout,
+            proxy=timestamp_proxy,
         )
     destination = Path(out)
     if fmt == "zip":

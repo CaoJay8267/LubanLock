@@ -30,6 +30,7 @@ SIGNATURE_FORMAT = "dotagent-signature/1"
 ALGORITHM = "ed25519"
 MAX_CRL_BYTES = 8 * 1024 * 1024
 MAX_OCSP_BYTES = 2 * 1024 * 1024
+MAX_TIMESTAMP_BYTES = 8 * 1024 * 1024
 DEFAULT_CACHE_MAX_AGE = 86_400
 
 
@@ -75,7 +76,15 @@ def _cached_bytes(
         raise PackageError(f"{url} response exceeds the size limit")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.parent.chmod(0o700)
+        except OSError:
+            pass
         path.write_bytes(payload)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
     except OSError:
         pass
     return payload
@@ -784,27 +793,57 @@ def _check_issued_by(certificate, issuer) -> None:
 
 
 def request_timestamp(
-    data: bytes, tsa_url: str, *, timeout: float = 30.0
+    data: bytes,
+    tsa_url: str,
+    *,
+    timeout: float = 30.0,
+    proxy: str | None = None,
 ) -> bytes:
     """Request an RFC 3161 timestamp token from *tsa_url*."""
 
     try:
         import rfc3161ng
+        from pyasn1.codec.der import encoder
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise PackageError(
             "RFC 3161 timestamps require the optional 'rfc3161ng' dependency"
         ) from exc
     try:
-        timestamper = rfc3161ng.RemoteTimestamper(
-            tsa_url,
-            hashname="sha256",
-            timeout=timeout,
-            include_tsa_certificate=True,
+        request = rfc3161ng.make_timestamp_request(
+            data=data, hashname="sha256", include_tsa_certificate=True
         )
-        token = timestamper.timestamp(data)
+        payload = encoder.encode(request)
+        opener = (
+            urllib.request.build_opener(
+                urllib.request.ProxyHandler({"http": proxy, "https": proxy})
+            )
+            if proxy
+            else urllib.request.build_opener()
+        )
+        http_request = urllib.request.Request(
+            tsa_url,
+            data=payload,
+            headers={"Content-Type": "application/timestamp-query"},
+            method="POST",
+        )
+        with opener.open(http_request, timeout=timeout) as response:
+            body = response.read(MAX_TIMESTAMP_BYTES + 1)
+        if len(body) > MAX_TIMESTAMP_BYTES:
+            raise PackageError("timestamp response exceeds the size limit")
+        parsed = rfc3161ng.decode_timestamp_response(body)
+        status = int(parsed["status"]["status"])
+        if status != 0:
+            raise PackageError(
+                f"TSA rejected the request with status {parsed['status']['status']}"
+            )
+        token = parsed["timeStampToken"]
+        if token is None:
+            raise PackageError("TSA response has no timestamp token")
+        return encoder.encode(token)
+    except PackageError:
+        raise
     except Exception as exc:
         raise PackageError(f"timestamp request failed: {exc}") from exc
-    return token if isinstance(token, bytes) else bytes(token)
 
 
 def verify_timestamp(

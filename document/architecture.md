@@ -1,4 +1,4 @@
-# DotAgent 架构与决策记录（v0.6.0）
+# DotAgent 架构与决策记录（v0.7.0）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
 > `dotagent/` 源码与 `tests/` 为准。
@@ -382,27 +382,29 @@ skills: [citation-format]
 
 - 本地 HTTP 服务提供真实 CRL 分发点测试；
 - 仓库内保存一份真实 TSA token（DigiCert）作为 RFC 3161 验签 fixture；
-- CRL/OCSP 响应缓存到 `~/.cache/dotagent/pki`（`DOTAGENT_CACHE_DIR` 可覆盖）；
-- `--offline` 只读缓存；`--proxy` 使用 HTTP(S) 代理；超时可配置。
+- CRL/OCSP 响应缓存到 `~/.cache/dotagent/pki`（`DOTAGENT_CACHE_DIR` 可覆盖），目录 0700/文件 0600；
+- `--offline` 只读缓存；`--proxy` 使用 HTTP(S) 代理；超时可配置；
+- RFC 3161 请求支持显式 `--timestamp-proxy`，不依赖环境变量。
 
 ### 5.9 GitHub Copilot
 
-`copilot` 目标生成 `.github/copilot-instructions.md`；导入器识别该文件并重建
-`AGENTS.md` + `.agents/agent.yaml`。
+`copilot` 目标生成 `.github/copilot-instructions.md` 与每个技能的
+`.github/instructions/<name>.instructions.md`；导入器识别两者并重建
+`AGENTS.md` + `.agents/agent.yaml` + knowledge。
 
 ### 5.10 审计依赖
 
 `rules.<CODE>.depends_on` 形成依赖图；拓扑排序执行，被依赖规则未触发时跳过。
 循环依赖产生 warning，不阻塞其他规则。
 
-## 6. v0.6 验证记录
+## 6. v0.7 验证记录
 
-- 单元测试：`python -m unittest discover -s tests -t tests`（142 个用例，全部通过）；
+- 单元测试：`python -m unittest discover -s tests -t tests`（143 个用例，全部通过）；
 - 静态检查：`ruff check dotagent tests scripts` 与 `mypy dotagent` 通过（48 个源文件）；
 - 示例通过 validate、15 项测试、determinism、package、audit、visualize；
-- 证书：真实 RFC 3161 token、真实 CRL 分发点、OCSP、离线缓存通过；
+- 证书：真实 RFC 3161 token/请求/代理、真实 CRL 分发点、OCSP、离线缓存通过；
 - MCP：stdio/HTTP/旧版 SSE/WebSocket 发现、schema 导入与缓存通过；
-- DSH/OpenAI/Copilot：映射、复杂 schema、handoff、投影/导入通过；
+- DSH/OpenAI/Copilot：映射、复杂 schema、handoff、主/路径级 instructions 通过；
 - 共享库：技能/知识/二进制资产、锁文件外部哈希、包导入往返通过；
 - 审计：分类、参数 schema、依赖跳过通过。
 
@@ -490,7 +492,7 @@ my-host = "my_package:MyHostAdapter"
 - OpenAI 复杂 schema 使用 `FunctionTool`，直接子 Agent 生成 `handoffs`；嵌套子 Agent 被扁平化。
 - `openai` 导入只处理字面量 `Agent(...)` 与 `openai-chat.json`，不执行/不推导任意 Python。
 - MCP 支持 stdio/HTTP/旧版 SSE/WebSocket；SSE/WS 的异常恢复与代理支持有限。
-- Copilot 导入只读取 `.github/copilot-instructions.md`，不解析路径级 instructions 文件。
+- Copilot 导入读取主 instructions 与 `.github/instructions/*.instructions.md`；不解释 `applyTo` 路径语义。
 - 旧布局 `.agent/` 与 `subagents/` 仍可读，但仅作为兼容路径。
 
 ## 13. 旧版验证记录（v0.2）

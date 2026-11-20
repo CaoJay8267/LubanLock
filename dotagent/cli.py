@@ -129,6 +129,7 @@ def _parser() -> argparse.ArgumentParser:
     package.add_argument("--sign-chain", action="append", default=[])
     package.add_argument("--timestamp-url")
     package.add_argument("--timestamp-timeout", type=float, default=30.0)
+    package.add_argument("--timestamp-proxy")
     package.add_argument("--verify", action="store_true")
     package.add_argument("--json", action="store_true")
     package.set_defaults(func=cmd_package)
@@ -430,6 +431,7 @@ def cmd_package(args) -> int:
         sign_chain=tuple(args.sign_chain or ()),
         timestamp_url=args.timestamp_url,
         timestamp_timeout=args.timestamp_timeout,
+        timestamp_proxy=args.timestamp_proxy,
     )
     verification = verify_package(package) if args.verify else None
     if args.json:

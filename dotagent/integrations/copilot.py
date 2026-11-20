@@ -52,6 +52,27 @@ def import_copilot(
     spec_dir.mkdir(parents=True, exist_ok=True)
     (project_root / AGENTS_FILE).write_text(instructions.rstrip() + "\n", encoding="utf-8")
     files = [project_root / AGENTS_FILE]
+    instructions_dir = (
+        instructions_path.parent / "instructions"
+        if instructions_path.parent.name == ".github"
+        else root / ".github" / "instructions"
+    )
+    if instructions_dir.is_dir():
+        for path in sorted(instructions_dir.glob("*.instructions.md")):
+            text = path.read_text(encoding="utf-8")
+            if text.startswith("---"):
+                parts = text.split("---", 2)
+                text = parts[2] if len(parts) == 3 else text
+            knowledge = project_root / ".agents" / "knowledge" / (
+                slugify(path.name.removesuffix(".instructions.md")) + ".md"
+            )
+            knowledge.parent.mkdir(parents=True, exist_ok=True)
+            knowledge.write_text(
+                f"---\nname: {knowledge.stem}\ndescription: Imported Copilot instruction.\n"
+                f"---\n\n{text.strip()}\n",
+                encoding="utf-8",
+            )
+            files.append(knowledge)
     _write_yaml(
         spec_dir / "agent.yaml",
         {

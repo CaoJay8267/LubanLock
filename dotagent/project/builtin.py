@@ -711,14 +711,23 @@ class CopilotProjector(Projector):
                     f"- `{tool.metadata.name}`: {tool.metadata.description or ''}".rstrip()
                 )
             parts.append("")
-        return ProjectionResult(
-            target=self.name,
-            files=(
+        files = [
+            ProjectedFile.text(
+                ".github/copilot-instructions.md", "\n".join(parts).rstrip() + "\n"
+            )
+        ]
+        for skill in agent.skills:
+            files.append(
                 ProjectedFile.text(
-                    ".github/copilot-instructions.md", "\n".join(parts).rstrip() + "\n"
-                ),
-            ),
-        )
+                    f".github/instructions/{slugify(skill.name)}.instructions.md",
+                    "---\n"
+                    'applyTo: "**"\n'
+                    "---\n\n"
+                    + skill.instructions.rstrip()
+                    + "\n",
+                )
+            )
+        return ProjectionResult(target=self.name, files=tuple(files))
 
 
 class OpenAIAgentsProjector(Projector):
