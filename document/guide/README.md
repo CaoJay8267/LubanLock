@@ -11,6 +11,7 @@
 7. [审计、可视化、部署](07-audit-visualize-deploy.md)
 8. [资源目录与签名](08-resources-and-signing.md)
 9. [扩展与常见问题](09-extending-faq.md)
+10. [实体复用与嵌套子 Agent](10-reuse-and-nesting.md)
 
 ## 30 秒版本
 

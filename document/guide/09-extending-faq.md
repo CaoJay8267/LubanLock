@@ -51,7 +51,7 @@ my-host = "my_package:MyHostAdapter"
 
 ### `.agent/` 与 `.agents/` 有什么区别？
 
-`.agents/` 是 v0.2 的规范目录；`.agent/` 是 v0.1 兼容别名，会给出弃用警告。
+`.agents/` 是 v0.2+ 的规范目录；`.agent/` 是 v0.1 兼容别名，会给出弃用警告。
 Agent Skills 标准本身不规定这个目录名，但 `.agents/skills/` 是当前生态的常见发现约定。
 
 ### `AGENTS.md` 属于 Agent Skills 吗？

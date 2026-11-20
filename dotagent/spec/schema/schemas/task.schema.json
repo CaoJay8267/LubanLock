@@ -7,6 +7,7 @@
   "additionalProperties": false,
   "properties": {
     "apiVersion": { "const": "dotagent/v1alpha1" },
+    "extends": { "$ref": "common.schema.json#/$defs/name" },
     "kind": { "const": "Task" },
     "metadata": { "$ref": "common.schema.json#/$defs/metadata" },
     "spec": { "$ref": "#/$defs/spec" }

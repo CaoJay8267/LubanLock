@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -192,6 +193,92 @@ class CliTests(unittest.TestCase):
             )
             self.assertEqual(code, 0)
             self.assertIn("signed by", out)
+
+    def test_certificate_chain_signing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            keys = Path(directory) / "keys"
+            code, _, _ = run_cli("keygen", "--out", str(keys), "--chain")
+            self.assertEqual(code, 0)
+            package = Path(directory) / "signed.zip"
+            code, _, _ = run_cli(
+                "package",
+                str(EXAMPLE),
+                "-o",
+                str(package),
+                "--sign-key",
+                str(keys / "signing-key.pem"),
+                "--sign-cert",
+                str(keys / "signing.pem"),
+            )
+            self.assertEqual(code, 0)
+            code, _, _ = run_cli(
+                "verify",
+                str(package),
+                "--ca-cert",
+                str(keys / "root-ca.pem"),
+                "--require-signature",
+            )
+            self.assertEqual(code, 0)
+
+    def test_mcp_discover_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            server = base / "server.py"
+            server.write_text(
+                """\
+import json, sys
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    if method == "initialize":
+        print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "fake", "version": "1"}}}), flush=True)
+    elif method == "tools/list":
+        print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": {"tools": [{"name": "echo", "description": "Echo", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}]}}), flush=True)
+""",
+                encoding="utf-8",
+            )
+            files = minimal_project()
+            files[".agents/mcp.json"] = json.dumps(
+                {
+                    "mcpServers": {
+                        "fake": {
+                            "type": "stdio",
+                            "command": sys.executable,
+                            "args": [str(server)],
+                        }
+                    }
+                }
+            )
+            project = write_project(base / "agent", files)
+            code, out, _ = run_cli(
+                "mcp", "discover", str(project), "--write", "--json", "--timeout", "5"
+            )
+            self.assertEqual(code, 0)
+            payload = json.loads(out)
+            self.assertTrue(payload["files"])
+            self.assertTrue(
+                (project / ".agents" / "tools" / "fake-echo.yaml").is_file()
+            )
+
+    def test_import_dsh_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory) / "preset"
+            base.mkdir()
+            (base / "preset.yml").write_text(
+                "name: Review\ndescription: Reviews.\n", encoding="utf-8"
+            )
+            (base / "agent.cordis.yml").write_text(
+                "- id: persona\n  name: '@deepseek-ai/dsh-persona'\n"
+                "  config:\n    prefix: Review code.\n",
+                encoding="utf-8",
+            )
+            out = Path(directory) / "imported"
+            code, _, _ = run_cli(
+                "import", str(base), "--from", "dsh", "--out", str(out)
+            )
+            self.assertEqual(code, 0)
+            code, _, _ = run_cli("validate", str(out))
+            self.assertEqual(code, 0)
 
     def test_test_command_json(self):
         code, out, _ = run_cli("test", str(EXAMPLE), "--json")

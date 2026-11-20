@@ -28,6 +28,7 @@ WORKFLOW_SCHEMA = "workflow.schema.json"
 TASK_SCHEMA = "task.schema.json"
 CHECKS_SCHEMA = "checks.schema.json"
 MCP_SCHEMA = "mcp.schema.json"
+AUDIT_SCHEMA = "audit.schema.json"
 
 
 @lru_cache(maxsize=1)
@@ -105,6 +106,7 @@ def check_all_schemas() -> dict[str, list[Diagnostic]]:
 
 __all__ = [
     "AGENT_SCHEMA",
+    "AUDIT_SCHEMA",
     "CHECKS_SCHEMA",
     "KNOWLEDGE_SCHEMA",
     "MCP_SCHEMA",

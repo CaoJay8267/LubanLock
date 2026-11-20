@@ -94,9 +94,22 @@ name: reviewer
 description: Reviews a draft and lists concrete improvements.
 tools:
   - echo
+uses:
+  - helper
 ---
 
 You are a reviewer. Return a short list of concrete improvements.
+""",
+    ".agents/agents/helper.md": """\
+---
+name: helper
+description: A reusable child agent that echoes a draft.
+tools:
+  - echo
+model: default
+---
+
+Echo the draft unchanged and point out missing sections.
 """,
     ".agents/tools/echo.yaml": """\
 apiVersion: dotagent/v1alpha1
@@ -117,6 +130,22 @@ spec:
   annotations:
     read_only: true
     idempotent: true
+""",
+    ".agents/tools/echo-upper.yaml": """\
+apiVersion: dotagent/v1alpha1
+kind: Tool
+extends: echo
+metadata:
+  name: echo-upper
+  description: Return the provided text in upper case.
+""",
+    ".agents/audit.yaml": """\
+apiVersion: dotagent/v1alpha1
+kind: AuditConfig
+rules:
+  AUD006:
+    severity: info
+budget_warning_ratio: 0.8
 """,
     ".agents/models/default.yaml": """\
 apiVersion: dotagent/v1alpha1

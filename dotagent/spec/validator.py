@@ -10,6 +10,7 @@ from dotagent.core.graph import reachable as graph_reachable
 from dotagent.core.graph import topological_order
 from dotagent.core.models import AgentDefinition, Workflow
 from dotagent.spec.builder import build_agent
+from dotagent.spec.inheritance import resolve_all_entities
 from dotagent.spec.loader import AgentSource, RawEntity
 from dotagent.spec.schema import (
     AGENT_SCHEMA,
@@ -44,7 +45,11 @@ def validate_source(source: AgentSource) -> tuple[ValidationResult, AgentDefinit
                 source.mcp, MCP_SCHEMA, path=source.mcp_rel or "mcp.json"
             )
         )
-    valid_entities = _validate_entities(source, result)
+    resolved_entities, inheritance_diagnostics = resolve_all_entities(
+        source.entities
+    )
+    result.extend(inheritance_diagnostics)
+    valid_entities = _validate_entities(source, result, resolved_entities)
     if not manifest_valid:
         return result, None
 
@@ -97,10 +102,12 @@ def _validate_manifest(
 
 
 def _validate_entities(
-    source: AgentSource, result: ValidationResult
+    source: AgentSource,
+    result: ValidationResult,
+    entities: dict[str, list[RawEntity]],
 ) -> dict[str, list[RawEntity]]:
-    valid: dict[str, list[RawEntity]] = {kind: [] for kind in source.entities}
-    for kind, raws in source.entities.items():
+    valid: dict[str, list[RawEntity]] = {kind: [] for kind in entities}
+    for kind, raws in entities.items():
         for raw in raws:
             diagnostics = validate_document(raw.data, raw.schema, path=raw.display)
             result.extend(diagnostics)
@@ -185,6 +192,7 @@ def _check_subagents(agent: AgentDefinition, result: ValidationResult) -> None:
     tool_names = {tool.metadata.name for tool in agent.tools}
     skill_names = {skill.name for skill in agent.skills}
     model_names = {model.metadata.name for model in agent.models}
+    subagent_names = {subagent.metadata.name for subagent in agent.subagents}
     for subagent in agent.subagents:
         path = _display(agent, subagent.file)
         pointer = f"/agents/{subagent.metadata.name}"
@@ -218,6 +226,48 @@ def _check_subagents(agent: AgentDefinition, result: ValidationResult) -> None:
                     path=path,
                     pointer=f"{pointer}/skills/{index}",
                 )
+        for index, child_name in enumerate(subagent.agents):
+            if child_name not in subagent_names:
+                result.error(
+                    "DTA301",
+                    f"subagent {subagent.metadata.name!r} references unknown child agent {child_name!r}",
+                    path=path,
+                    pointer=f"{pointer}/agents/{index}",
+                )
+    _check_subagent_graph(agent, result)
+
+def _check_subagent_graph(agent: AgentDefinition, result: ValidationResult) -> None:
+    by_name = {subagent.metadata.name: subagent for subagent in agent.subagents}
+    reported_cycles: set[tuple[str, ...]] = set()
+
+    def depth(name: str, stack: tuple[str, ...] = ()) -> int:
+        subagent = by_name.get(name)
+        if subagent is None:
+            return 0
+        if name in stack:
+            cycle = stack[stack.index(name) :] + (name,)
+            if cycle not in reported_cycles:
+                reported_cycles.add(cycle)
+                result.error(
+                    "DTA323",
+                    "nested subagent cycle: " + " -> ".join(cycle),
+                    path=_display(agent, subagent.file),
+                    pointer=f"/agents/{name}",
+                )
+            return 0
+        best = 0
+        for child in subagent.agents:
+            best = max(best, 1 + depth(child, (*stack, name)))
+        return best
+
+    for subagent in agent.subagents:
+        if depth(subagent.metadata.name) > 8:
+            result.error(
+                "DTA324",
+                f"nested subagent depth exceeds 8 at {subagent.metadata.name!r}",
+                path=_display(agent, subagent.file),
+                pointer=f"/agents/{subagent.metadata.name}",
+            )
 
 
 def _check_tools(agent: AgentDefinition, result: ValidationResult) -> None:

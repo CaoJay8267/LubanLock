@@ -1,4 +1,4 @@
-# DotAgent 架构与决策记录（v0.2.0）
+# DotAgent 架构与决策记录（v0.3.0）
 
 > 本文档回答三个问题：提案是否合理、是否已实现、边界在哪里。行为以
 > `dotagent/` 源码与 `tests/` 为准。
@@ -77,7 +77,7 @@ AGENTS.md + .agents/
 | 模块 | 职责 |
 | --- | --- |
 | `core/` | errors、models、utils、graph、layout 路径 |
-| `spec/` | loader、builder、validator、JSON Schema 引擎与 11 份 schema |
+| `spec/` | loader、builder、validator、JSON Schema 引擎与 12 份 schema |
 | `build/` | compiler、packaging、lockfile、signing |
 | `project/` | 投影协议、注册表、内置目标 |
 | `runtime/` | 只读运行时视图与适配器注册 |
@@ -87,7 +87,7 @@ AGENTS.md + .agents/
 | `templates/` | `init` 模板 |
 | `cli.py` | 全部子命令 |
 
-## 3. 规范 v0.2
+## 3. 规范（v0.2 基线，v0.3 扩展见第 5 节）
 
 ### 3.1 目录
 
@@ -292,9 +292,93 @@ skills: [citation-format]
 
 - `--from claude`：`CLAUDE.md`、`.claude/agents`、`.claude/skills`、`.claude/commands`、
   `.mcp.json` → `AGENTS.md` + `.agents/`；未知工具生成通用声明并 warning；
-- `--from package`：从 `agent.json` + 资产重建可编辑工程。
+- `--from package`：从 `agent.json` + 资产重建可编辑工程；
+- `--from dsh`：读取旧版 `preset.yml` + `agent.cordis.yml`，或新版 bundle
+  `cordis.patch.yml` 中 `@deepseek-ai/dsh-agent-preset` 的声明；persona 前缀为指令，
+  `@deepseek-ai/dsh-tool-*` 生成通用工具声明。
 
-## 5. 关键决策（ADR）
+## 5. v0.3 增量设计
+
+### 5.1 实体复用与嵌套（可判定）
+
+- **`extends`**：仅限同种类（subagent/tool/model/workflow/task）。原始文档在 schema 校验前
+  合并：child 覆盖 base，映射深合并，列表整体替换，名称不继承。继承链上限 16
+  （`DTA322`），环报 `DTA321`，缺失 base 报 `DTA301`。
+- **`agents` / `uses`**：子 Agent 的嵌套子 Agent，二者合并去重。校验子 Agent 引用存在
+  （`DTA301`）、无环（`DTA323`）、深度 ≤8（`DTA324`）。
+- 解析发生在原始文档层，因此最终 schema 与 IR 都是“已展开”的，不引入运行期求值。
+- 子 Agent 的 `extends` 在正文为空时继承 base 正文；有正文则覆盖。
+
+### 5.2 MCP 工具自动发现
+
+- `dotagent mcp discover` 读取 `.agents/mcp.json`，连接 `stdio` 或 `http` server；
+- 握手：`initialize` → `notifications/initialized` → `tools/list`（支持 cursor 分页）；
+- 工具 `inputSchema` 经 DotAgent schema 子集 lint 后写入 `.agents/tools/<server>-<tool>.yaml`，
+  `source = {kind: mcp, ref: "<server>/<tool>"}`；
+- `sse`/`ws` 明确报告 unsupported；不执行工具，只导入 schema；
+- stdio 命令不经 shell，带超时、输出大小与工具数量上限；`${VAR}` 做环境变量展开。
+
+### 5.3 内容哈希缓存
+
+- 锁文件记录每个源文件 SHA-256；
+- `.agents/.cache/sources.json` 缓存 `(size, mtime_ns, sha256)`；
+- `compile --incremental`：stat 命中缓存则复用哈希；mtime 变但内容哈希相同也视为未变；
+  只有哈希或锁不一致才重建；
+- 缓存目录被 loader 与 lock 扫描忽略，不进入产物。
+
+### 5.4 证书链与密钥轮换
+
+- `keygen --chain`：Ed25519 root CA → signing 证书；`package --sign-key --sign-cert`；
+- `signature.json` 携带叶证书与中间链；验证时用 `--ca-cert` 作为 trust anchor；
+- 验证：有效期、issuer/subject、BasicConstraints、KeyUsage、Ed25519 签名；
+- `keygen --rotate` 在既有 root 下签发新叶证书，旧/新包共享同一 trust anchor；
+- 默认仍无签名，未签名包保持字节级可复现；证书链仅支持 Ed25519。
+
+### 5.5 新投影与导入
+
+- `dsh`：输出 DSH bundle（`package.json` + `cordis.patch.yml`），声明
+  `@deepseek-ai/dsh-agent-preset`，persona 前缀来自 `AGENTS.md`；工具/技能/MCP 不映射并 warning；
+- `openai`：OpenAI Agents SDK `agent.py` 脚手架 + `tools.json`，不生成 handler；
+- `openai-chat`：Chat Completions 请求骨架（model/messages/tools）；
+- `import --from dsh`：旧版 preset 目录与新版 patch 均可导入；
+- `import --from openai`：读取 `openai-chat.json`，或用 `ast` 解析 `agent.py` 中的字面量
+  `Agent(...)`（不执行代码）。
+
+### 5.6 可配置审计
+
+`.agents/audit.yaml`（`kind: AuditConfig`）支持：
+
+- `rules.<CODE>.enabled` / `severity`（含 DTA 诊断码）；
+- 追加 `secret_patterns`；
+- 覆盖 `risky_tool_names`；
+- `budget_warning_ratio`；
+- `ignore_paths`（glob）。
+
+配置先经 schema 校验，再应用于审计发现；非法 regex 报 `DTA308`。
+
+## 6. v0.3 验证记录
+
+- 单元测试：`python -m unittest discover -s tests -t tests`（119 个用例，全部通过）；
+- 静态检查：`ruff check dotagent tests scripts` 通过；
+- 示例通过 validate、13 项测试、determinism、package、audit、visualize；
+- 证书链：root 签名验证、旋转后新旧包验证、错误 root 拒绝；
+- MCP：临时 stdio server 的 `initialize`/`tools/list` 与 schema 导入通过；
+- DSH/OpenAI：投影结构、Python 脚手架语法、DSH preset 导入通过；
+- 缓存：touch 不变内容仍可复用，内容变化触发重建。
+
+## 7. v0.3 下一步
+
+1. 实体复用扩展到跨 Agent 共享库（带显式 `uses` 导入与版本约束）。
+2. MCP 增量发现、缓存与 `http` SSE 完整支持。
+3. 证书链吊销/OCSP 与签名时间戳。
+4. 更多投影/导入（OpenAI 反向导入、其他 harness），先核对格式。
+5. 审计规则按类别分组与自定义规则插件。
+
+## 8. v0.2 基线记录
+
+以下章节是 v0.2 的设计与验证记录，保留用于追溯。
+
+## 9. 关键决策（ADR）
 
 | 编号 | 决策 | 理由 | 代价 |
 | --- | --- | --- | --- |
@@ -312,7 +396,7 @@ skills: [citation-format]
 | ADR-12 | 审计为启发式 | 不联网、不执行工具 | 不能替代专业 secret 扫描 |
 | ADR-13 | 投影/适配器 entry point | 核心零厂商依赖 | 插件质量由生态负责 |
 
-## 6. 非目标落实
+## 10. 非目标落实
 
 1. **不做 LLM 推理/Agent Loop/Harness/Sandbox/多租户/长期记忆/工具 Handler**：
    `runtime` 只读；无网络栈、模型 SDK、进程/沙箱调用。
@@ -320,7 +404,7 @@ skills: [citation-format]
 3. **不臆造厂商格式**：Claude 投影依据官方文档；MCP 使用共享 `mcpServers` 形状；
    无法映射处 warning；模型 `provider_options` 原样保存并标 TODO。
 
-## 7. 扩展机制
+## 11. 扩展机制
 
 ```python
 from dotagent.project import ProjectedFile, ProjectionResult, Projector
@@ -344,7 +428,7 @@ my-target = "my_package:MyProjector"
 my-host = "my_package:MyHostAdapter"
 ```
 
-## 8. 已知限制 / TODO
+## 12. 已知限制 / TODO
 
 - 子 Agent 仅单文件；无嵌套 `.agents`、独立知识/技能。
 - 无继承/覆盖；共享实体需同层重复。
@@ -357,9 +441,9 @@ my-host = "my_package:MyHostAdapter"
 - 暂无 DSH/OpenAI 投影；建议先核对官方格式再以插件实现。
 - `--incremental` 基于 mtime/size，极端情况下需 `--check` 或全量编译兜底。
 
-## 9. 验证记录
+## 13. 旧版验证记录（v0.2）
 
-- 单元测试：`python -m unittest discover -s tests -t tests`（99 个用例，全部通过）。
+- 单元测试：`python -m unittest discover -s tests -t tests`（v0.2 时 99 个用例）。
 - 静态检查：`ruff check dotagent tests scripts` 通过。
 - 示例 `examples/research-agent`：validate、13 项测试、determinism、package、audit、
   visualize 全部通过。
@@ -367,7 +451,7 @@ my-host = "my_package:MyHostAdapter"
 - 导入：Claude 布局与包往返后均能通过 `validate`。
 - 确定性：同一示例两次编译指纹一致；两次打包字节一致。
 
-## 10. 下一步
+## 14. 旧版下一步（v0.2）
 
 1. 嵌套子 Agent 与实体复用（`extends`/`uses`），保持可判定。
 2. MCP 工具自动发现（连接 server 读取 tool list）与 schema 导入。

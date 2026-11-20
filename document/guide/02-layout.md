@@ -12,12 +12,16 @@
 │   ├── agents/<name>.md
 │   ├── tools/ models/ workflows/ tasks/
 │   ├── mcp.json
+│   ├── audit.yaml
 │   ├── tests/
+│   ├── .cache/
 │   └── dotagent.lock
 ├── build/                    # 编译产物（生成）
 ├── dist/                     # 包与投影（生成）
 └── reports/                  # 审计与可视化（生成）
 ```
+
+`.cache/` 与 `dotagent.lock` 用于增量构建；`audit.yaml` 用于配置审计规则。
 
 解析入口可以是项目目录、`.agents/` 或旧的 `.agent/`。
 

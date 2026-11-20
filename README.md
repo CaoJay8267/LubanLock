@@ -28,6 +28,15 @@ Agent 定义不应该被锁死在某一个宿主的目录里。DotAgent 把“�
 - **符合开放标准**：技能严格遵循 [Agent Skills](https://agentskills.io/specification)；
   指令使用 [AGENTS.md](https://agents.md/) 开放格式。
 
+## v0.3 新增
+
+- `extends` 实体继承与 `agents` / `uses` 嵌套子 Agent（有环检测与深度上限）
+- MCP 工具自动发现（stdio/http）与 schema 导入
+- 内容哈希缓存：mtime 变化但内容未变时不会重建
+- 证书链签名与密钥轮换（Ed25519 / X.509，默认仍无签名）
+- 新投影目标：`dsh`、`openai`、`openai-chat`；DSH/OpenAI 反向导入
+- `.agents/audit.yaml` 可配置审计规则
+
 ## 安装
 
 ```bash
@@ -65,10 +74,12 @@ resource/agent/research-agent/
 │   ├── agent.yaml
 │   ├── knowledge/
 │   ├── skills/<name>/SKILL.md
-│   ├── agents/<name>.md     # 子 Agent
+│   ├── agents/<name>.md     # 子 Agent（可嵌套）
 │   ├── tools/ models/ workflows/ tasks/
 │   ├── mcp.json             # MCP 服务声明
+│   ├── audit.yaml           # 审计规则（可选）
 │   ├── tests/
+│   ├── .cache/              # 增量构建缓存（生成）
 │   └── dotagent.lock        # 可选锁文件
 ├── build/                   # 编译产物（生成）
 ├── dist/                    # 包与投影（生成）
@@ -128,6 +139,47 @@ allowed-tools: web_search web_fetch # 可选，空格分隔（标准中为实验
 
 完整字段见 [架构文档](document/architecture.md)。
 
+### 复用与嵌套
+
+结构化实体（子 Agent、工具、模型、工作流、任务）支持 `extends`：
+
+```yaml
+# tools/echo-upper.yaml
+apiVersion: dotagent/v1alpha1
+kind: Tool
+extends: echo          # 同种类实体，继承 spec/metadata（名称除外）
+metadata:
+  name: echo-upper
+  description: 返回大写文本。
+```
+
+子 Agent 用 `agents` 或 `uses` 组合子 Agent：
+
+```yaml
+---
+name: reviewer
+description: 审阅草稿。
+uses: [helper]        # 等价于 agents: [helper]
+extends: base-reviewer # 也可继承另一个子 Agent 的提示词与配置
+---
+```
+
+解析规则：同种类、单层作用域、有环即报错（`DTA321`/`DTA323`），嵌套深度上限 8
+（`DTA324`），继承链上限 16（`DTA322`）。全部静态可判定。
+
+### MCP
+
+`.agents/mcp.json` 使用标准 `mcpServers` 形状。连接 server 自动发现工具：
+
+```bash
+dotagent mcp discover research-agent --write --json
+```
+
+- 支持 `stdio` 与 `http`；`sse`/`ws` 会明确报告不支持；
+- 读取 `tools/list`，把 `inputSchema` 写成 `.agents/tools/<server>-<tool>.yaml`；
+- 不执行发现的工具，只做 schema 导入；
+- 命令不经过 shell，带超时与输出大小限制。
+
 ### 工具声明
 
 ```yaml
@@ -175,15 +227,16 @@ spec:
 | `dotagent list` | 列出 `resource/agent` 下的 Agent |
 | `dotagent validate [PATH] [--strict] [--json]` | Schema + 语义校验 |
 | `dotagent compile [PATH] [-o DIR] [--check\|--locked\|--incremental]` | 编译、校验产物、锁校验、增量 |
-| `dotagent lock [PATH]` | 写入 `.agents/dotagent.lock` |
+| `dotagent lock [PATH]` | 写入 `.agents/dotagent.lock`（内容哈希） |
 | `dotagent project [PATH] --target NAME [-o DIR]` | 投影（`--list` 查看目标） |
-| `dotagent package [PATH] [--format zip\|dir] [--sign-key FILE] [--verify]` | 可复现打包、可选签名 |
-| `dotagent verify PACKAGE [--public-key FILE] [--require-signature]` | 校验包与签名 |
-| `dotagent keygen [--out DIR]` | 生成 Ed25519 密钥对 |
+| `dotagent package [PATH] [--format zip\|dir] [--sign-key FILE] [--sign-cert CERT] [--verify]` | 可复现打包、可选签名 |
+| `dotagent verify PACKAGE [--public-key FILE] [--ca-cert FILE] [--require-signature]` | 校验包、钥匙/证书链 |
+| `dotagent keygen [--out DIR] [--chain\|--rotate --root-key K --root-cert C]` | 生成密钥、证书链或轮换证书 |
 | `dotagent test [PATH] [--suite NAME] [-k TEXT] [--update]` | 声明式测试 |
-| `dotagent audit [PATH] [--fail-on error\|warning\|never]` | 静态审计，写 `reports/audit/` |
+| `dotagent audit [PATH] [--fail-on error\|warning\|never]` | 静态审计，读 `.agents/audit.yaml` |
 | `dotagent visualize [PATH]` | Mermaid/HTML，写 `reports/visual/` |
-| `dotagent import SOURCE [--from claude\|package] [--out DIR]` | 从 Claude Code 或包反向导入 |
+| `dotagent mcp discover [PATH] [--server NAME] [--write]` | 连接 MCP server 导入工具 schema |
+| `dotagent import SOURCE [--from claude\|package\|dsh\|openai] [--out DIR]` | 从 Claude Code、DSH、OpenAI 或包反向导入 |
 | `dotagent skill add NAME --agent PATH` | 添加合规技能 |
 | `dotagent reset [PATH] --yes [--build]` | 清理生成物并可选重建 |
 | `dotagent deploy [PATH] [--target NAME] [--sign-key FILE]` | 打包 + 投影到 `dist/` |
@@ -194,6 +247,20 @@ spec:
 项目路径，也可以是 `resource/agent/` 下的 Agent 名称。
 
 退出码：`0` 成功，`1` 校验/测试/校验失败，`2` 用法错误，`3` 内部错误。
+
+## 投影目标
+
+| 目标 | 输出 |
+| --- | --- |
+| `json` | 中性 `agent.json` + `assets/` |
+| `markdown` | 人类可读文档包 |
+| `claude` | `CLAUDE.md`、`.claude/agents`、`.claude/skills`、`.claude/commands`、`.mcp.json` |
+| `dsh` | DeepSeek Harness 预设 bundle（`package.json` + `cordis.patch.yml`） |
+| `openai` | OpenAI Agents SDK 脚手架（`agent.py`）+ 工具 schema |
+| `openai-chat` | Chat Completions 请求骨架（model + messages + tools） |
+
+DSH bundle 只映射 persona，工具/技能/MCP 会以 warning 提示安装对应 DSH 插件；
+OpenAI 目标不生成工具 handler，只生成 schema 与 Agent 脚手架。
 
 ## 编译产物与锁文件
 
@@ -206,7 +273,8 @@ spec:
 - `agent.json` 的 SHA-256 指纹覆盖定义与所有资产哈希，跨机器稳定。
 - `dotagent lock` 生成 `.agents/dotagent.lock`，记录每个源文件的 SHA-256。
 - `dotagent compile --locked` 在锁与源码不一致时拒绝构建。
-- `dotagent compile --incremental` 先做 stat 快路径，命中锁时直接复用现有构建。
+- `dotagent compile --incremental` 先查 `.agents/.cache/sources.json`：mtime 未变直接复用缓存，
+  mtime 变了才重新哈希；内容哈希一致就跳过编译。**touch 文件不再导致重建**。
 
 ## 打包与签名
 
@@ -219,13 +287,30 @@ signature.json   # 仅签名时存在
 
 - 默认无签名；ZIP 条目排序、固定时间戳与压缩参数，字节级可复现。
 - `--sign-key private.pem` 对 `manifest.json` 精确字节做 Ed25519 签名。
-- `verify --public-key public.pem --require-signature` 强制验签。
-- 签名文件不进入 `manifest.entries`，避免自引用；校验器单独处理。
+- 证书模式：`--sign-key signing-key.pem --sign-cert signing.pem`，签名内携带叶证书与中间链；
+  `verify --ca-cert root-ca.pem --require-signature` 验证证书链与签名。
+- `keygen --chain` 生成 root CA + 叶证书；`keygen --rotate` 在同一个 root 下签发新叶证书，
+  实现密钥轮换（旧包和新包都可用同一 trust anchor 验证）。
+- 默认仍无签名，未签名包保持可复现；证书链仅支持 Ed25519。
 
 ## 审计与可视化
 
 `dotagent audit` 组合校验诊断与静态启发式：明文密钥、危险工具注解、明文 HTTP 端点、
-MCP 传输缺失、预算接近上限、占位模型等。输出：
+MCP 传输缺失、预算接近上限、占位模型等。规则可在 `.agents/audit.yaml` 配置：
+
+```yaml
+apiVersion: dotagent/v1alpha1
+kind: AuditConfig
+rules:
+  AUD001: {enabled: false}
+  AUD006: {severity: error}
+secret_patterns: ['TOKEN-[0-9]+']
+risky_tool_names: [bash, shell]
+budget_warning_ratio: 0.8
+ignore_paths: ['knowledge/private/*']
+```
+
+输出：
 
 ```text
 <project>/reports/audit/audit.json

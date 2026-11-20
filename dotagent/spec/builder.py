@@ -256,6 +256,11 @@ def _build_subagent(raw: RawEntity, diagnostics: list[Diagnostic]) -> SubAgent |
     name = data.get("name")
     if not isinstance(name, str) or not name:
         return None
+    agents = tuple(
+        dict.fromkeys(
+            [*tuple(data.get("agents") or ()), *tuple(data.get("uses") or ())]
+        )
+    )
     return SubAgent(
         metadata=_metadata_from_front_matter(data, name=name),
         instructions=raw.body or "",
@@ -263,6 +268,7 @@ def _build_subagent(raw: RawEntity, diagnostics: list[Diagnostic]) -> SubAgent |
         model=data.get("model"),
         tools=tuple(data.get("tools") or ()),
         skills=tuple(data.get("skills") or ()),
+        agents=agents,
     )
 
 

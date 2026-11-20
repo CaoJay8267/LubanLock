@@ -32,6 +32,22 @@ DotAgent 会：
 
 > 环境变量不会在 DotAgent 中展开或求值；框架只保存声明。
 
+## 自动发现工具
+
+连接 server 读取 `tools/list`，并把 schema 写成 DotAgent 工具声明：
+
+```bash
+dotagent mcp discover research-agent --write
+dotagent mcp discover research-agent --server docs --write --json
+```
+
+- 支持 `stdio` 与 `http`；
+- `sse` / `ws` 会明确报告不支持，不会猜测；
+- 生成 `.agents/tools/<server>-<tool>.yaml`，`source.ref = "<server>/<tool>"`；
+- 不执行发现的工具，只导入 schema；
+- stdio 命令不经 shell，带超时、输出大小和工具数量限制；
+- 已在 `mcp.json` 中声明但无法连接时，会给出 warning，不影响其他 server。
+
 ## 工具与 MCP 的关联
 
 工具可以声明来源：
@@ -86,6 +102,16 @@ dotagent import dist/research-agent-0.1.0.zip --from package --out resource/agen
 ```
 
 从 `agent.json` 与资产重建可编辑工程；适合“包 → 源码”的闭环，但格式与指纹可能与原工程不同。
+
+## 导入 DSH / OpenAI
+
+```bash
+# DSH：旧版 preset.yml + agent.cordis.yml，或新版 cordis.patch.yml
+dotagent import ./my-dsh-preset --from dsh
+
+# OpenAI：openai-chat.json，或生成的 agent.py + tools.json（AST 解析，不执行代码）
+dotagent import ./openai --from openai
+```
 
 ## 自动识别
 

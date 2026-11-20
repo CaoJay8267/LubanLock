@@ -73,6 +73,8 @@ def package_agent(
     *,
     fmt: str = "zip",
     sign_key: str | Path | None = None,
+    sign_cert: str | Path | None = None,
+    sign_chain: tuple[str | Path, ...] = (),
 ) -> Path:
     """Write *compiled* as a reproducible package and return its path."""
 
@@ -96,7 +98,12 @@ def package_agent(
     files["manifest.json"] = manifest_bytes
     if sign_key is not None:
         files[SIGNATURE_NAME] = pretty_json(
-            sign_manifest(manifest_bytes, sign_key)
+            sign_manifest(
+                manifest_bytes,
+                sign_key,
+                certificate_path=sign_cert,
+                chain_paths=sign_chain,
+            )
         ).encode("utf-8")
 
     destination = Path(out)
@@ -147,6 +154,7 @@ def verify_package(
     path: str | Path,
     *,
     public_key: str | Path | None = None,
+    ca_cert: str | Path | tuple[str | Path, ...] | None = None,
     require_signature: bool = False,
 ) -> PackageVerification:
     """Check the structure, checksums, fingerprint and optional signature."""
@@ -178,15 +186,28 @@ def verify_package(
 
     if signature is None and require_signature:
         errors.append("package is not signed (signature.json is missing)")
-    if signature is None and public_key is not None:
-        errors.append("package is not signed but a public key was provided")
-    if signature is not None and require_signature and public_key is None:
-        errors.append("--public-key is required to verify a signed package")
-    if signature is not None and public_key is not None:
-        try:
-            verify_manifest(files["manifest.json"], signature, public_key)
-        except (PackageError, KeyError) as exc:
-            errors.append(str(exc))
+    if signature is None and (public_key is not None or ca_cert):
+        errors.append("package is not signed but a verification key was provided")
+    if signature is not None and require_signature and public_key is None and not ca_cert:
+        errors.append("--public-key or --ca-cert is required to verify a signed package")
+    if signature is not None:
+        anchors: tuple[str | Path, ...] = ()
+        if ca_cert is not None:
+            anchors = ca_cert if isinstance(ca_cert, tuple) else (ca_cert,)
+        if signature.get("certificate") and not anchors:
+            errors.append("certificate signature requires --ca-cert")
+        elif not signature.get("certificate") and anchors and public_key is None:
+            errors.append("raw signature requires --public-key (not --ca-cert)")
+        elif signature.get("certificate") or public_key is not None:
+            try:
+                verify_manifest(
+                    files["manifest.json"],
+                    signature,
+                    public_key_path=public_key,
+                    ca_cert_paths=anchors,
+                )
+            except (PackageError, KeyError) as exc:
+                errors.append(str(exc))
 
     if agent_document is not None:
         agent = agent_document.get("agent")

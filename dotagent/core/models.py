@@ -114,6 +114,7 @@ class SubAgent:
     model: str | None = None
     tools: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
+    agents: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         data = self.metadata.to_dict()
@@ -124,6 +125,7 @@ class SubAgent:
                 "model": self.model,
                 "tools": list(self.tools),
                 "skills": list(self.skills),
+                "agents": list(self.agents),
             }
         )
         return _drop_empty(data)

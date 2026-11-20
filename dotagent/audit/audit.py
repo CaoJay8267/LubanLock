@@ -2,7 +2,8 @@
 
 The audit is deliberately offline: it combines validation diagnostics with
 heuristics for risky tools, insecure endpoints, leaked-looking secrets and
-budget pressure.  It never executes tools or calls a model.
+budget pressure.  It never executes tools or calls a model.  Rules can be
+configured in ``.agents/audit.yaml``.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from dotagent.audit.config import AuditConfig, load_audit_config
 from dotagent.build.compiler import compile_agent
 from dotagent.core.errors import Diagnostic
 from dotagent.core.models import AgentDefinition
@@ -26,7 +28,7 @@ _SECRET_PATTERNS = (
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 )
 
-_RISKY_TOOL_NAMES = ("shell", "exec", "bash", "powershell", "cmd", "run_command")
+_DEFAULT_RISKY_TOOL_NAMES = ("shell", "exec", "bash", "powershell", "cmd", "run_command")
 
 
 @dataclass(frozen=True)
@@ -121,12 +123,14 @@ def audit_agent(
 
     source = load_source(path)
     result, definition = validate_source(source)
+    spec_dir = definition.spec_dir if definition else source.spec_dir
+    config, config_diagnostics = load_audit_config(spec_dir)
     findings = [_from_diagnostic(diagnostic) for diagnostic in result.sorted()]
     fingerprint: str | None = None
     stats: dict = {}
     if definition is not None:
         stats = _stats(definition)
-        findings.extend(_heuristic_findings(definition))
+        findings.extend(_heuristic_findings(definition, config))
         try:
             compiled = compile_agent(path)
             fingerprint = compiled.fingerprint
@@ -134,6 +138,8 @@ def audit_agent(
             stats["asset_bytes"] = sum(asset.size for asset in compiled.assets)
         except Exception:  # noqa: BLE001, S110 - audit keeps validation findings
             pass
+    findings = _apply_config(findings, config)
+    findings.extend(_from_diagnostic(diagnostic) for diagnostic in config_diagnostics)
     root = definition.root if definition else source.root
     report = AuditReport(
         agent=definition.metadata.name if definition else "(unparsed)",
@@ -153,6 +159,28 @@ def audit_agent(
     )
     markdown_path.write_text(report.to_markdown(), encoding="utf-8")
     return report, [json_path, markdown_path]
+
+
+def _apply_config(
+    findings: list[AuditFinding], config: AuditConfig
+) -> list[AuditFinding]:
+    filtered: list[AuditFinding] = []
+    for finding in findings:
+        if not config.enabled(finding.code):
+            continue
+        if config.ignored(finding.path):
+            continue
+        severity = config.severity(finding.code, finding.severity)
+        filtered.append(
+            AuditFinding(
+                code=finding.code,
+                severity=severity,
+                message=finding.message,
+                path=finding.path,
+                pointer=finding.pointer,
+            )
+        )
+    return filtered
 
 
 def _from_diagnostic(diagnostic: Diagnostic) -> AuditFinding:
@@ -177,17 +205,27 @@ def _stats(definition: AgentDefinition) -> dict:
     return stats
 
 
-def _heuristic_findings(definition: AgentDefinition) -> list[AuditFinding]:
+def _heuristic_findings(
+    definition: AgentDefinition, config: AuditConfig
+) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
-    findings.extend(_secret_findings(definition))
-    findings.extend(_tool_findings(definition))
+    findings.extend(_secret_findings(definition, config))
+    findings.extend(_tool_findings(definition, config))
     findings.extend(_model_findings(definition))
-    findings.extend(_budget_findings(definition))
+    findings.extend(_budget_findings(definition, config))
     return findings
 
 
-def _secret_findings(definition: AgentDefinition) -> list[AuditFinding]:
+def _secret_findings(
+    definition: AgentDefinition, config: AuditConfig
+) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
+    patterns = list(_SECRET_PATTERNS)
+    for pattern in config.secret_patterns:
+        try:
+            patterns.append(re.compile(pattern))
+        except re.error:
+            continue
     texts: list[tuple[str, str]] = []
     if definition.instructions:
         texts.append((definition.instructions.file or "AGENTS.md", definition.instructions.text))
@@ -195,19 +233,19 @@ def _secret_findings(definition: AgentDefinition) -> list[AuditFinding]:
         texts.append((knowledge.file, knowledge.content))
     for skill in definition.skills:
         texts.append((skill.file, skill.instructions))
-    for name, config in definition.mcp:
-        env = config.get("env") if isinstance(config, dict) else None
+    for name, server in definition.mcp:
+        env = server.get("env") if isinstance(server, dict) else None
         if isinstance(env, dict):
             for key, value in env.items():
                 if isinstance(value, str):
                     texts.append((f"mcp.json:{name}.env.{key}", value))
-        headers = config.get("headers") if isinstance(config, dict) else None
+        headers = server.get("headers") if isinstance(server, dict) else None
         if isinstance(headers, dict):
             for key, value in headers.items():
                 if isinstance(value, str):
                     texts.append((f"mcp.json:{name}.headers.{key}", value))
     for path, text in texts:
-        for pattern in _SECRET_PATTERNS:
+        for pattern in patterns:
             if pattern.search(text):
                 findings.append(
                     AuditFinding(
@@ -221,8 +259,11 @@ def _secret_findings(definition: AgentDefinition) -> list[AuditFinding]:
     return findings
 
 
-def _tool_findings(definition: AgentDefinition) -> list[AuditFinding]:
+def _tool_findings(
+    definition: AgentDefinition, config: AuditConfig
+) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
+    risky_names = config.risky_tool_names or _DEFAULT_RISKY_TOOL_NAMES
     for tool in definition.tools:
         annotations = dict(tool.annotations)
         risky = annotations.get("open_world") or annotations.get("destructive")
@@ -236,7 +277,7 @@ def _tool_findings(definition: AgentDefinition) -> list[AuditFinding]:
                     path=tool.file,
                 )
             )
-        if any(word in name for word in _RISKY_TOOL_NAMES):
+        if any(word in name for word in risky_names):
             findings.append(
                 AuditFinding(
                     "AUD003",
@@ -283,16 +324,19 @@ def _model_findings(definition: AgentDefinition) -> list[AuditFinding]:
     return findings
 
 
-def _budget_findings(definition: AgentDefinition) -> list[AuditFinding]:
+def _budget_findings(
+    definition: AgentDefinition, config: AuditConfig
+) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
     limits = definition.effective_limits()
     knowledge_chars = sum(len(item.content) for item in definition.knowledge)
-    if knowledge_chars > 0.8 * limits["knowledge_chars"]:
+    if knowledge_chars > config.budget_warning_ratio * limits["knowledge_chars"]:
         findings.append(
             AuditFinding(
                 "AUD007",
                 "warning",
-                f"知识内容已使用 {knowledge_chars}/{limits['knowledge_chars']} 字符预算的 80% 以上",
+                f"知识内容已使用 {knowledge_chars}/{limits['knowledge_chars']} 字符预算的"
+                f" {int(config.budget_warning_ratio * 100)}% 以上",
                 path="knowledge/",
             )
         )

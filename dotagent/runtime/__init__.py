@@ -99,6 +99,29 @@ class AgentRuntime:
     def subagents(self) -> tuple[SubAgent, ...]:
         return self.definition.subagents
 
+    def subagent_tree(self, name: str | None = None) -> dict:
+        """Return the nested subagent hierarchy as plain dictionaries."""
+
+        def build(current: str, stack: frozenset[str]) -> dict:
+            subagent = self.definition.subagent(current)
+            if subagent is None:
+                return {"name": current, "missing": True, "children": []}
+            if current in stack:
+                return {"name": current, "cycle": True, "children": []}
+            return {
+                "name": current,
+                "description": subagent.metadata.description,
+                "children": [
+                    build(child, stack | {current}) for child in subagent.agents
+                ],
+            }
+
+        if name is not None:
+            return build(name, frozenset())
+        return {
+            "agents": [build(item.metadata.name, frozenset()) for item in self.subagents()]
+        }
+
     def tasks(self) -> tuple[Task, ...]:
         return self.definition.tasks
 

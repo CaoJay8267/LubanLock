@@ -13,21 +13,25 @@ import yaml
 
 from dotagent._version import __version__
 from dotagent.audit import audit_agent, visualize_agent
+from dotagent.build.cache import incremental_status, refresh_cache
 from dotagent.build.compiler import check_compiled, compile_agent, write_compiled
-from dotagent.build.lockfile import (
-    check_lock,
-    read_lock,
-    reusable_output,
-    write_lock,
-)
+from dotagent.build.lockfile import check_lock, read_lock, write_lock
 from dotagent.build.packaging import package_agent, verify_package
-from dotagent.build.signing import generate_keypair
-from dotagent.core.errors import DotAgentError, LoadError, UsageError
-from dotagent.core.paths import (
-    resolve_agent_layout,
-    resolve_agent_target,
+from dotagent.build.signing import (
+    generate_certificate_chain,
+    generate_keypair,
+    rotate_signing_certificate,
 )
-from dotagent.integrations import import_claude, import_package
+from dotagent.core.errors import DotAgentError, LoadError, UsageError
+from dotagent.core.paths import resolve_agent_layout, resolve_agent_target
+from dotagent.integrations import (
+    import_claude,
+    import_dsh,
+    import_openai,
+    import_package,
+    looks_like_dsh,
+    looks_like_openai,
+)
 from dotagent.project import list_projectors, project_agent
 from dotagent.spec.loader import load_source
 from dotagent.spec.schema import (
@@ -116,6 +120,8 @@ def _parser() -> argparse.ArgumentParser:
     package.add_argument("-o", "--out")
     package.add_argument("--format", choices=("zip", "dir"), default="zip")
     package.add_argument("--sign-key")
+    package.add_argument("--sign-cert")
+    package.add_argument("--sign-chain", action="append", default=[])
     package.add_argument("--verify", action="store_true")
     package.add_argument("--json", action="store_true")
     package.set_defaults(func=cmd_package)
@@ -123,6 +129,7 @@ def _parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify", help="verify a package")
     verify.add_argument("package")
     verify.add_argument("--public-key")
+    verify.add_argument("--ca-cert", action="append", default=[])
     verify.add_argument("--require-signature", action="store_true")
     verify.add_argument("--json", action="store_true")
     verify.set_defaults(func=cmd_verify)
@@ -148,13 +155,28 @@ def _parser() -> argparse.ArgumentParser:
     import_cmd = subparsers.add_parser("import", help="import Claude Code or a package")
     import_cmd.add_argument("source")
     import_cmd.add_argument(
-        "--from", dest="from_", choices=("auto", "claude", "package"), default="auto"
+        "--from",
+        dest="from_",
+        choices=("auto", "claude", "package", "dsh", "openai"),
+        default="auto",
     )
     import_cmd.add_argument("--out")
     import_cmd.add_argument("--name")
     import_cmd.add_argument("--force", action="store_true")
     import_cmd.add_argument("--json", action="store_true")
     import_cmd.set_defaults(func=cmd_import)
+
+    mcp = subparsers.add_parser("mcp", help="MCP discovery")
+    mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
+    mcp_discover = mcp_sub.add_parser(
+        "discover", help="connect to servers and list/import tools"
+    )
+    mcp_discover.add_argument("path", nargs="?", default=".")
+    mcp_discover.add_argument("--server", action="append", default=[])
+    mcp_discover.add_argument("--write", action="store_true", help="write tool declarations")
+    mcp_discover.add_argument("--timeout", type=float, default=10.0)
+    mcp_discover.add_argument("--json", action="store_true")
+    mcp_discover.set_defaults(func=cmd_mcp_discover)
 
     audit = subparsers.add_parser("audit", help="audit an agent and write reports")
     audit.add_argument("path", nargs="?", default=".")
@@ -173,6 +195,14 @@ def _parser() -> argparse.ArgumentParser:
 
     keygen = subparsers.add_parser("keygen", help="create an Ed25519 signing keypair")
     keygen.add_argument("--out", default="keys")
+    keygen.add_argument(
+        "--chain", action="store_true", help="generate a root CA and signing certificate"
+    )
+    keygen.add_argument(
+        "--rotate", action="store_true", help="issue a new leaf under an existing root"
+    )
+    keygen.add_argument("--root-key", help="root CA private key for rotation")
+    keygen.add_argument("--root-cert", help="root CA certificate for rotation")
     keygen.add_argument("--json", action="store_true")
     keygen.set_defaults(func=cmd_keygen)
 
@@ -255,9 +285,10 @@ def cmd_compile(args) -> int:
 
     if args.incremental and not args.check and not args.locked:
         lock = read_lock(lock_file)
-        if lock is not None and reusable_output(
+        lock = incremental_status(
             layout.project_root, layout.spec_dir, lock, out / "agent.json"
-        ):
+        )
+        if lock is not None:
             if args.json:
                 _dump(
                     {
@@ -293,6 +324,7 @@ def cmd_compile(args) -> int:
             print(f"{'up to date' if ok else 'stale'}: {message}")
         return EXIT_OK if ok else EXIT_FAILURE
     write_compiled(compiled, out)
+    refresh_cache(layout.project_root, layout.spec_dir)
     if args.json:
         _dump(
             {
@@ -316,6 +348,7 @@ def cmd_lock(args) -> int:
     target = _target(args.path, args.resource)
     compiled = compile_agent(target)
     path = write_lock(compiled)
+    refresh_cache(compiled.definition.root, compiled.definition.spec_dir)
     if args.json:
         _dump({"ok": True, "path": str(path), "fingerprint": compiled.fingerprint})
     else:
@@ -367,7 +400,12 @@ def cmd_package(args) -> int:
     )
     out = Path(args.out) if args.out else default
     package = package_agent(
-        compiled, out, fmt=args.format, sign_key=args.sign_key
+        compiled,
+        out,
+        fmt=args.format,
+        sign_key=args.sign_key,
+        sign_cert=args.sign_cert,
+        sign_chain=tuple(args.sign_chain or ()),
     )
     verification = verify_package(package) if args.verify else None
     if args.json:
@@ -396,6 +434,7 @@ def cmd_verify(args) -> int:
     result = verify_package(
         args.package,
         public_key=args.public_key,
+        ca_cert=tuple(args.ca_cert or ()),
         require_signature=args.require_signature,
     )
     if args.json:
@@ -509,20 +548,47 @@ def cmd_import(args) -> int:
     source = Path(args.source)
     mode = args.from_
     if mode == "auto":
-        if source.is_file() or (
-            source.is_dir() and (source / "agent.json").is_file()
-        ):
+        if source.is_file():
+            if looks_like_openai(source):
+                mode = "openai"
+            elif source.suffix.lower() == ".zip":
+                mode = "package"
+            else:
+                raise UsageError(
+                    f"cannot detect the import format of {source}; use --from "
+                    "claude|package|dsh|openai"
+                )
+        elif (source / "agent.json").is_file():
             mode = "package"
-        elif source.is_dir() and (
-            (source / ".claude").exists() or (source / "CLAUDE.md").is_file()
-        ):
+        elif (source / ".claude").exists() or (source / "CLAUDE.md").is_file():
             mode = "claude"
+        elif looks_like_dsh(source):
+            mode = "dsh"
+        elif looks_like_openai(source):
+            mode = "openai"
         else:
             raise UsageError(
-                f"cannot detect the import format of {source}; use --from claude|package"
+                f"cannot detect the import format of {source}; use --from "
+                "claude|package|dsh|openai"
             )
     if mode == "claude":
         report = import_claude(
+            source,
+            out=args.out,
+            name=args.name,
+            force=args.force,
+            resource_root=args.resource,
+        )
+    elif mode == "dsh":
+        report = import_dsh(
+            source,
+            out=args.out,
+            name=args.name,
+            force=args.force,
+            resource_root=args.resource,
+        )
+    elif mode == "openai":
+        report = import_openai(
             source,
             out=args.out,
             name=args.name,
@@ -540,6 +606,33 @@ def cmd_import(args) -> int:
         print(f"agent: {report.name}")
         for warning in report.warnings:
             print(f"warning: {warning}", file=sys.stderr)
+    return EXIT_OK
+
+
+def cmd_mcp_discover(args) -> int:
+    from dotagent import load_agent
+    from dotagent.integrations import discover_agent, import_tools
+
+    target = _target(args.path, args.resource)
+    definition = load_agent(target)
+    report = discover_agent(
+        definition, servers=tuple(args.server or ()), timeout=args.timeout
+    )
+    if args.write:
+        report = import_tools(definition, report)
+    if args.json:
+        _dump(report.to_dict())
+    else:
+        for discovery in report.discoveries:
+            print(f"{discovery.server} ({discovery.transport})")
+            for tool in discovery.tools:
+                print(f"  - {tool.name}: {tool.description}")
+            for warning in discovery.warnings:
+                print(f"    warning: {warning}", file=sys.stderr)
+        for warning in report.warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+        for path in report.files:
+            print(f"wrote {path}")
     return EXIT_OK
 
 
@@ -587,6 +680,33 @@ def cmd_visualize(args) -> int:
 
 
 def cmd_keygen(args) -> int:
+    if args.rotate:
+        if not args.root_key or not args.root_cert:
+            raise UsageError("--rotate requires --root-key and --root-cert")
+        private, certificate = rotate_signing_certificate(
+            args.out, root_key_path=args.root_key, root_cert_path=args.root_cert
+        )
+        if args.json:
+            _dump({"private": str(private), "certificate": str(certificate)})
+        else:
+            print(f"signing key: {private}")
+            print(f"certificate: {certificate}")
+        return EXIT_OK
+    if args.chain:
+        private, certificate, root = generate_certificate_chain(args.out)
+        if args.json:
+            _dump(
+                {
+                    "private": str(private),
+                    "certificate": str(certificate),
+                    "rootCa": str(root),
+                }
+            )
+        else:
+            print(f"signing key: {private}")
+            print(f"certificate: {certificate}")
+            print(f"root CA:     {root}")
+        return EXIT_OK
     private, public = generate_keypair(args.out)
     if args.json:
         _dump({"private": str(private), "public": str(public)})

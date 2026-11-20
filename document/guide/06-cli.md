@@ -70,14 +70,32 @@ dotagent project my-agent --target markdown -o ./dist/docs
 
 默认输出 `<project>/dist/<target>/`。
 
+## mcp discover
+
+```bash
+dotagent mcp discover my-agent
+dotagent mcp discover my-agent --server docs --write
+dotagent mcp discover my-agent --server docs --timeout 5 --json
+```
+
+连接 MCP server，读取 `tools/list`；`--write` 把 schema 写到 `.agents/tools/`。
+仅支持 `stdio` 与 `http`。
+
 ## package / verify / keygen
 
 ```bash
-dotagent keygen --out ./keys
-dotagent package my-agent --sign-key ./keys/private.pem --verify
+dotagent keygen --out ./keys                     # 原始 Ed25519 密钥
+dotagent keygen --out ./keys --chain             # root CA + 叶证书
+dotagent keygen --out ./keys2 --rotate \
+  --root-key ./keys/root-key.pem --root-cert ./keys/root-ca.pem
+
+dotagent package my-agent --sign-key ./keys/signing-key.pem \
+  --sign-cert ./keys/signing.pem --verify
 dotagent verify ./dist/research-agent-0.1.0.zip \
-  --public-key ./keys/public.pem --require-signature
+  --ca-cert ./keys/root-ca.pem --require-signature
 ```
+
+默认无签名，未签名包仍可复现。
 
 ## test
 
@@ -110,6 +128,8 @@ dotagent visualize my-agent --out ./reports/visual
 
 ```bash
 dotagent import ./claude-project --from claude
+dotagent import ./dsh-preset --from dsh
+dotagent import ./openai --from openai
 dotagent import ./dist/agent.zip --from package --out resource/agent/restored
 ```
 

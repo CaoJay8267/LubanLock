@@ -5,12 +5,22 @@ from __future__ import annotations
 from dotagent.build.compiler import CompiledAgent
 
 from .base import ProjectedFile, ProjectionResult, Projector
-from .builtin import ClaudeProjector, JsonProjector, MarkdownProjector
+from .builtin import (
+    ClaudeProjector,
+    DshProjector,
+    JsonProjector,
+    MarkdownProjector,
+    OpenAIAgentsProjector,
+    OpenAIChatProjector,
+)
 from .registry import get_projector, list_projectors, register
 
 register(JsonProjector())
 register(MarkdownProjector())
 register(ClaudeProjector())
+register(DshProjector())
+register(OpenAIAgentsProjector())
+register(OpenAIChatProjector())
 
 
 def project_agent(compiled: CompiledAgent, target: str) -> ProjectionResult:

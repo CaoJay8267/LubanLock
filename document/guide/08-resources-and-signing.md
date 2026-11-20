@@ -40,58 +40,47 @@ resource/agent/research-agent/
 
 ## 签名
 
-### 生成密钥
+### 原始 Ed25519 密钥
 
 ```bash
 dotagent keygen --out ./keys
-```
-
-生成 Ed25519：
-
-```text
-keys/private.pem
-keys/public.pem
-```
-
-私钥权限尽力设为 `0600`；请自行妥善保管。
-
-### 签名打包
-
-```bash
-dotagent package research-agent \
-  --sign-key ./keys/private.pem \
-  --verify
-```
-
-包内新增 `signature.json`：
-
-```json
-{
-  "format": "dotagent-signature/1",
-  "alg": "ed25519",
-  "keyId": "…",
-  "signature": "base64…"
-}
-```
-
-签名覆盖 `manifest.json` 的精确字节；`signature.json` 不进入 manifest 条目。
-
-### 验签
-
-```bash
+dotagent package research-agent --sign-key ./keys/private.pem
 dotagent verify dist/research-agent-0.1.0.zip \
-  --public-key ./keys/public.pem \
-  --require-signature
+  --public-key ./keys/public.pem --require-signature
 ```
 
-- 不带 `--require-signature` 时，未签名包仍通过结构/哈希校验；
-- 提供错误公钥、篡改 manifest、缺少签名都会失败；
-- 默认（不签名）包保持字节级可复现；同一密钥与内容生成的签名也确定。
+### 证书链
 
-### 安全边界
+```bash
+dotagent keygen --out ./keys --chain
+# keys/root-key.pem, root-ca.pem, signing-key.pem, signing.pem
 
-签名证明“内容由持有私钥的人签署过”，不提供证书链、时间戳或身份信任。
-生产环境应结合密钥管理、审计与发布流程。
+dotagent package research-agent \
+  --sign-key ./keys/signing-key.pem \
+  --sign-cert ./keys/signing.pem
+
+dotagent verify dist/research-agent-0.1.0.zip \
+  --ca-cert ./keys/root-ca.pem --require-signature
+```
+
+- `signature.json` 携带叶证书与中间链；
+- 校验会检查有效期、issuer/subject、CA 约束、KeyUsage 和 Ed25519 签名；
+- 证书链仅支持 Ed25519。
+
+### 密钥轮换
+
+```bash
+dotagent keygen --out ./keys-v2 --rotate \
+  --root-key ./keys/root-key.pem \
+  --root-cert ./keys/root-ca.pem
+```
+
+新叶证书仍由同一个 root 签发，因此旧包和新包都能用同一个
+`root-ca.pem` 验证；`keyId` 用于区分签名者。
+
+### 生成物
+
+包内 `signature.json` 不进入 `manifest.entries`，避免自引用；默认无签名包保持字节级可复现。
 
 ## 锁文件与增量
 

@@ -34,6 +34,28 @@ dotagent audit research-agent --fail-on never     # 总是返回 0
 
 > 审计是启发式，不能替代专业 secret 扫描或权限评审。
 
+## 配置审计规则
+
+`.agents/audit.yaml`：
+
+```yaml
+apiVersion: dotagent/v1alpha1
+kind: AuditConfig
+rules:
+  AUD001: {enabled: false}
+  AUD006: {severity: error}
+secret_patterns: ['TOKEN-[0-9]+']
+risky_tool_names: [bash, shell]
+budget_warning_ratio: 0.8
+ignore_paths: ['knowledge/private/*']
+```
+
+- `rules` 可以开关任意 code（包括 `DTA*` 与 `AUD*`），并覆盖 severity；
+- `secret_patterns` 追加到内置密钥正则；
+- `risky_tool_names` 覆盖默认的命令类工具名；
+- `ignore_paths` 使用 glob 过滤发现项；
+- 配置本身先做 schema 校验，非法 regex 会报 `DTA308`。
+
 ## 可视化
 
 ```bash

@@ -62,7 +62,14 @@ _KNOWN_DIRS = {
     "tasks",
     "tests",
 }
-_KNOWN_FILES = {"agent.yaml", "agent.yml", "mcp.json", "dotagent.lock", LEGACY_INSTRUCTIONS_FILE}
+_KNOWN_FILES = {
+    "agent.yaml",
+    "agent.yml",
+    "mcp.json",
+    "audit.yaml",
+    "dotagent.lock",
+    LEGACY_INSTRUCTIONS_FILE,
+}
 
 
 @dataclass(frozen=True)
